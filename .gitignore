@@ -1,0 +1,74 @@
+# ==============================
+# Python
+# ==============================
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Virtual environment
+backend/.venv/
+
+# Environment variables
+.env
+.env.*
+!.env.example
+
+# Test / cache
+.pytest_cache/
+.ruff_cache/
+
+# ==============================
+# React Native / Expo
+# ==============================
+mobile/node_modules/
+mobile/.expo/
+mobile/.expo-shared/
+
+# Build
+mobile/dist/
+mobile/web-build/
+
+# Logs
+*.log
+
+# ==============================
+# IDE
+# ==============================
+.vscode/
+.idea/
+
+# ==============================
+# OS
+# ==============================
+.DS_Store
+Thumbs.db
+
+# ==============================
+# Local databases
+# ==============================
+*.db
+*.sqlite
+*.sqlite3
+
+# ==============================
+# AI / local assistant files
+# ==============================
+.claude/
+.cursor/
+.windsurf/
+.aider*
+
+# ==============================
+# AI / local assistant files
+# ==============================
+.claude/
+mobile/.claude/
+.cursor/
+mobile/.cursor/
+.windsurf/
+mobile/.windsurf/
+.aider*
+AGENTS.md
+CLAUDE.md
+mobile/AGENTS.md
+mobile/CLAUDE.md
