@@ -63,7 +63,7 @@ export default function CreateCategoryScreen() {
         },
       );
 
-      router.replace("/categories");
+      router.replace("/(tabs)/more/categories");
     } catch (err) {
       setError(
         err instanceof Error

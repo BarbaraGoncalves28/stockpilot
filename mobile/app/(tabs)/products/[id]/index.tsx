@@ -1,33 +1,17 @@
-import {
-  ActivityIndicator,
-  ScrollView,
-  StyleSheet,
-  Text,
-  TouchableOpacity,
-  View,
-} from "react-native";
+import { ActivityIndicator, Alert, Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View, } from "react-native";
 import { router, useLocalSearchParams } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
-
+import { useCallback, useEffect, useState, } from "react";
 import { useAuth } from "../../../../src/auth/AuthContext";
-import { getProduct } from "../../../../src/modules/products/productService";
+import { deleteProduct, getProduct, restoreProduct, } from "../../../../src/modules/products/productService";
 import type { Product } from "../../../../src/modules/products/product.types";
 import { getProductMovements } from "../../../../src/modules/stock-movements/stockMovementService";
 import type { StockMovement } from "../../../../src/modules/stock-movements/stockMovement.types";
 import { getProductStockIntelligence } from "../../../../src/modules/stock-intelligence/stockIntelligenceService";
-import type {
-  StockIntelligenceItem,
-} from "../../../../src/modules/stock-intelligence/stockIntelligence.types";
+import type { StockIntelligenceItem, } from "../../../../src/modules/stock-intelligence/stockIntelligence.types";
 import { colors } from "../../../../src/theme/colors";
-import {
-  radius,
-  shadows,
-  spacing,
-} from "../../../../src/theme/spacing";
+import { radius, shadows, spacing, } from "../../../../src/theme/spacing";
+import { getCategory } from "../../../../src/modules/categories/categoryService";
+import { getSupplier } from "../../../../src/modules/suppliers/supplierService";
 
 function formatNumber(value: string) {
   return Number(value).toLocaleString("pt-BR", {
@@ -210,6 +194,11 @@ export default function ProductDetailsScreen() {
   const [error, setError] =
     useState("");
 
+  const [actionLoading, setActionLoading] = useState(false);
+
+  const [categoryName, setCategoryName] = useState("");
+const [supplierName, setSupplierName] = useState("");
+
   const loadProduct = useCallback(async () => {
     if (!accessToken) {
       router.replace("/");
@@ -249,12 +238,26 @@ export default function ProductDetailsScreen() {
       ]);
 
       setProduct(productResponse);
-      setMovements(
-        movementsResponse.slice(0, 5),
-      );
-      setIntelligence(
-        intelligenceResponse,
-      );
+setMovements(movementsResponse.slice(0, 5));
+setIntelligence(intelligenceResponse);
+
+setCategoryName("");
+setSupplierName("");
+
+const [categoryResult, supplierResult] = await Promise.allSettled([
+  getCategory(accessToken, productResponse.category_id),
+  productResponse.supplier_id !== null
+    ? getSupplier(accessToken, productResponse.supplier_id)
+    : Promise.resolve(null),
+]);
+
+if (categoryResult.status === "fulfilled") {
+  setCategoryName(categoryResult.value.name);
+}
+
+if (supplierResult.status === "fulfilled") {
+  setSupplierName(supplierResult.value?.name ?? "");
+}
     } catch (err) {
       setError(
         err instanceof Error
@@ -269,6 +272,108 @@ export default function ProductDetailsScreen() {
   useEffect(() => {
     loadProduct();
   }, [loadProduct]);
+
+  async function executeDeactivate() {
+    if (!accessToken || !product || actionLoading) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+
+      await deleteProduct(accessToken, product.id);
+
+      if (Platform.OS === "web") {
+        window.alert("Produto desativado com sucesso.");
+        router.replace("/(tabs)/products");
+      } else {
+        Alert.alert(
+          "Produto desativado",
+          "O produto foi desativado com sucesso.",
+          [
+            {
+              text: "OK",
+              onPress: () =>
+                router.replace("/(tabs)/products"),
+            },
+          ],
+        );
+      }
+    } catch (err) {
+      const message = 
+      err instanceof Error
+        ? err.message
+        : "Não foi possível desativar o produto.";
+
+        if (Platform.OS === "web") {
+          window.alert(
+            `Não foi possível desativar o produto.\n\n${message}`,
+          );
+        } else {
+          Alert.alert(
+            "Não foi possível desativar o produto",
+            message,
+          );
+        }
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  async function executeRestore() {
+    if(!accessToken || !product || actionLoading) {
+      return;
+    }
+
+    try {
+      setActionLoading(true);
+      setError("");
+
+      await restoreProduct(accessToken, product.id);
+      await loadProduct();
+    } catch (err) {
+      setError(
+        err instanceof Error 
+          ? err.message
+          : "Não foi possível restaurar o produto.",
+      );
+    } finally {
+      setActionLoading(false);
+    }
+  }
+
+  function handleDeactivate() {
+    if (!accessToken || !product || actionLoading) {
+      return;
+    }
+
+    const message = `Tem certeza de que deseja desativar o produto "${product.name}"?` + "O registro e o histórico de movimentações  serão preservados.";
+
+    if (Platform.OS === "web") {
+      if (window.confirm(message)) {
+        void executeDeactivate();
+      }
+      return;
+    }
+
+    Alert.alert(
+      "Desativar produto",
+      message,
+      [
+        {
+          text: "Cancelar",
+          style: "cancel",
+        },
+        {
+          text: "Desativar",
+          style: "destructive",
+          onPress: () => {
+            void executeDeactivate();
+          },
+        },
+      ],
+    );
+  }
 
   if (!accessToken || !user) {
     return (
@@ -582,20 +687,16 @@ export default function ProductDetailsScreen() {
 
           <View style={styles.card}>
             <DetailRow
-              label="Categoria"
-              value={`ID ${product.category_id}`}
-            />
+  label="Categoria"
+  value={categoryName || "Não informado"}
+/>
 
             <View style={styles.rowDivider} />
 
             <DetailRow
-              label="Fornecedor"
-              value={
-                product.supplier_id !== null
-                  ? `ID ${product.supplier_id}`
-                  : "Não informado"
-              }
-            />
+  label="Fornecedor"
+  value={supplierName || "Não informado"}
+/>
 
             <View style={styles.rowDivider} />
 
@@ -783,7 +884,7 @@ export default function ProductDetailsScreen() {
               style={styles.primaryAction}
               onPress={() =>
                 router.push(
-                  `/products/${product.id}/edit`,
+                  `/(tabs)/products/${product.id}/edit`,
                 )
               }
             >
@@ -795,6 +896,49 @@ export default function ProductDetailsScreen() {
                 Editar produto
               </Text>
             </TouchableOpacity>
+
+            
+{product.is_active ? (
+  <TouchableOpacity
+    activeOpacity={0.85}
+    disabled={actionLoading}
+    style={[
+      styles.dangerAction,
+      actionLoading && styles.actionDisabled,
+    ]}
+    onPress={handleDeactivate}
+  >
+    {actionLoading ? (
+      <ActivityIndicator
+        size="small"
+        color={colors.coral[600]}
+      />
+    ) : (
+      <Text style={styles.dangerActionText}>
+        Desativar produto
+      </Text>
+    )}
+  </TouchableOpacity>
+
+) : (
+    <TouchableOpacity
+       activeOpacity={0.85}
+       disabled={actionLoading}
+       style={[
+          styles.restoreAction,
+          actionLoading && styles.actionDisabled,
+       ]}
+       onPress={executeRestore}
+    >
+     {actionLoading ? (
+      <ActivityIndicator size="small" color={colors.text.inverse} />
+     ) : (
+      <Text style={styles.restoreActionText}>
+        Restaurar produto
+      </Text>
+     )}
+    </TouchableOpacity>
+  )}
           </View>
         ) : null}
 
@@ -812,8 +956,8 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[5],
-    paddingBottom: spacing[8],
+    paddingTop: spacing[7],
+    paddingBottom: spacing[10],
   },
 
   centered: {
@@ -879,7 +1023,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: spacing[6],
+    marginBottom: spacing[7],
   },
 
   backIcon: {
@@ -902,7 +1046,7 @@ const styles = StyleSheet.create({
 
   topBarTitle: {
     color: colors.text.primary,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
 
@@ -917,8 +1061,8 @@ const styles = StyleSheet.create({
   },
 
   productIcon: {
-    width: 64,
-    height: 64,
+    width: 68,
+    height: 68,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.xl,
@@ -927,7 +1071,7 @@ const styles = StyleSheet.create({
 
   productIconText: {
     color: colors.brand[600],
-    fontSize: 25,
+    fontSize: 27,
     fontWeight: "800",
   },
 
@@ -938,8 +1082,9 @@ const styles = StyleSheet.create({
 
   productName: {
     color: colors.text.primary,
-    fontSize: 21,
+    fontSize: 22,
     fontWeight: "800",
+    letterSpacing: -0.3,
   },
 
   productSku: {
@@ -962,10 +1107,10 @@ const styles = StyleSheet.create({
   },
 
   stockCard: {
-    padding: spacing[5],
+    padding: spacing[6],
     borderRadius: radius.xl,
     backgroundColor: colors.brand[500],
-    ...shadows.medium,
+    ...shadows.floating,
   },
 
   cardEyebrow: {
@@ -983,7 +1128,7 @@ const styles = StyleSheet.create({
 
   stockValue: {
     color: colors.text.inverse,
-    fontSize: 36,
+    fontSize: 38,
     fontWeight: "800",
     letterSpacing: -1,
   },
@@ -1036,10 +1181,10 @@ const styles = StyleSheet.create({
   },
 
   sectionTitle: {
+    flex: 1,
     color: colors.text.primary,
     fontSize: 17,
     fontWeight: "700",
-    marginBottom: spacing[3],
   },
 
   sectionHeaderTitle: {
@@ -1050,7 +1195,6 @@ const styles = StyleSheet.create({
     color: colors.brand[600],
     fontSize: 12,
     fontWeight: "700",
-    marginBottom: spacing[3],
   },
 
   card: {
@@ -1274,16 +1418,16 @@ const styles = StyleSheet.create({
   },
 
   actions: {
-    marginTop: spacing[7],
+    marginTop: spacing[8],
   },
 
   primaryAction: {
-    minHeight: 50,
+    minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.brand[500],
-    ...shadows.soft,
+    ...shadows.floating,
   },
 
   primaryActionText: {
@@ -1295,5 +1439,42 @@ const styles = StyleSheet.create({
   bottomSpace: {
     height: spacing[5],
   },
+
+  
+dangerAction: {
+  minHeight: 52,
+  alignItems: "center",
+  justifyContent: "center",
+  borderRadius: radius.lg,
+  backgroundColor: colors.coral[50],
+  borderWidth: 1,
+  borderColor: colors.coral[100],
+  marginTop: spacing[3],
+},
+
+dangerActionText: {
+  color: colors.coral[600],
+  fontSize: 14,
+  fontWeight: "700",
+},
+
+actionDisabled: {
+  opacity: 0.6,
+},
+
+
+restoreAction: {
+  backgroundColor: colors.teal[700],
+  borderRadius: radius.lg,
+  paddingVertical: spacing[4],
+  alignItems: "center",
+  justifyContent: "center",
+},
+restoreActionText: {
+  color: colors.text.inverse,
+  fontSize: 14,
+  fontWeight: "700",
+},
+
 });
 

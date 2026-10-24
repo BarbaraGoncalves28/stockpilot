@@ -324,8 +324,27 @@ def test_get_nonexistent_supplier_returns_404(client):
 
 def test_unauthenticated_user_cannot_get_supplier(client, db):
     from app.models.supplier import Supplier
+    from app.models.user import User
+
+    register_response = client.post(
+        "/auth/register",
+        json={
+            "name": "Proprietario do Fornecedor",
+            "email": "proprietario-fornecedor@stockpilot.com",
+            "password": "SenhaUser123",
+        },
+    )
+
+    assert register_response.status_code == 201
+
+    owner = db.query(User).filter_by(
+        email="proprietario-fornecedor@stockpilot.com"
+    ).first()
+
+    assert owner is not None
 
     supplier = Supplier(
+        owner_id=owner.id,
         name="Fornecedor Protegido",
         email="protegido@fornecedor.com",
         is_active=True,
@@ -335,9 +354,7 @@ def test_unauthenticated_user_cannot_get_supplier(client, db):
     db.commit()
     db.refresh(supplier)
 
-    response = client.get(
-        f"/suppliers/{supplier.id}",
-    )
+    response = client.get(f"/suppliers/{supplier.id}")
 
     assert response.status_code == 401
 

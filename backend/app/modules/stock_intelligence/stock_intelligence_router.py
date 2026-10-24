@@ -1,4 +1,6 @@
+
 from app.db.database import get_db
+from app.core.inventory_owner import resolve_inventory_owner_id
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.stock_intelligence.stock_intelligence_schema import (
     StockAlertItem,
@@ -24,7 +26,11 @@ def intelligence(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return get_stock_intelligence(db, days=days)
+    return get_stock_intelligence(
+        db=db,
+        owner_id=resolve_inventory_owner_id(db, current_user),
+        days=days,
+    )
 
 
 @router.get("/alerts", response_model=list[StockAlertItem])
@@ -33,7 +39,11 @@ def alerts(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    return get_stock_intelligence_alerts(db, days=days)
+    return get_stock_intelligence_alerts(
+        db=db,
+        owner_id=resolve_inventory_owner_id(db, current_user),
+        days=days,
+    )
 
 
 @router.get(
@@ -48,8 +58,9 @@ def product_intelligence(
 ):
     try:
         return get_stock_intelligence_product(
-            db,
-            product_id,
+            db=db,
+            product_id=product_id,
+            owner_id=resolve_inventory_owner_id(db, current_user),
             days=days,
         )
     except ValueError as error:
@@ -57,6 +68,3 @@ def product_intelligence(
             status_code=404,
             detail=str(error),
         ) from error
-
-
-

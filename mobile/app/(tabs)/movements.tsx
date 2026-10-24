@@ -1,5 +1,7 @@
 import {
   ActivityIndicator,
+  NativeScrollEvent,
+  NativeSyntheticEvent,
   Pressable,
   RefreshControl,
   ScrollView,
@@ -18,15 +20,9 @@ import type {
   StockMovementType,
 } from "../../src/modules/stock-movements/stockMovement.types";
 import { colors } from "../../src/theme/colors";
-import {
-  radius,
-  shadows,
-  spacing,
-} from "../../src/theme/spacing";
+import { radius, shadows, spacing } from "../../src/theme/spacing";
 
-type MovementFilter =
-  | "ALL"
-  | StockMovementType;
+type MovementFilter = "ALL" | StockMovementType;
 
 const filters: {
   key: MovementFilter;
@@ -50,9 +46,7 @@ const filters: {
   },
 ];
 
-function getMovementLabel(
-  type: StockMovementType,
-) {
+function getMovementLabel(type: StockMovementType) {
   switch (type) {
     case "IN":
       return "Entrada";
@@ -80,9 +74,7 @@ function getMovementIcon(
   }
 }
 
-function getMovementColor(
-  type: StockMovementType,
-) {
+function getMovementColor(type: StockMovementType) {
   switch (type) {
     case "IN":
       return colors.teal[600];
@@ -95,9 +87,7 @@ function getMovementColor(
   }
 }
 
-function formatQuantity(
-  quantity: string,
-) {
+function formatQuantity(quantity: string) {
   const value = Number(quantity);
 
   return new Intl.NumberFormat("pt-BR", {
@@ -105,9 +95,7 @@ function formatQuantity(
   }).format(value);
 }
 
-function formatDate(
-  value: string,
-) {
+function formatDate(value: string) {
   const date = new Date(value);
 
   if (Number.isNaN(date.getTime())) {
@@ -122,17 +110,12 @@ function formatDate(
   }).format(date);
 }
 
-function MovementCard({
-  movement,
-}: {
-  movement: StockMovement;
-}) {
-  const color = getMovementColor(
-    movement.movement_type,
-  );
+function MovementCard({ movement }: { movement: StockMovement }) {
+  const color = getMovementColor(movement.movement_type);
 
-  const isPositive =
-    movement.movement_type === "IN";
+  const isPositive = movement.movement_type === "IN";
+
+  const isAdjustment = movement.movement_type === "ADJUSTMENT";
 
   return (
     <View style={styles.movementCard}>
@@ -150,9 +133,7 @@ function MovementCard({
         ]}
       >
         <Ionicons
-          name={getMovementIcon(
-            movement.movement_type,
-          )}
+          name={getMovementIcon(movement.movement_type)}
           size={19}
           color={color}
         />
@@ -161,9 +142,7 @@ function MovementCard({
       <View style={styles.movementContent}>
         <View style={styles.movementTopRow}>
           <Text style={styles.movementTitle}>
-            {getMovementLabel(
-              movement.movement_type,
-            )}
+            {getMovementLabel(movement.movement_type)}
           </Text>
 
           <Text
@@ -174,37 +153,32 @@ function MovementCard({
               },
             ]}
           >
-            {isPositive ? "+" : ""}
-            {formatQuantity(movement.quantity)}
+            {isAdjustment
+              ? `Novo saldo: ${formatQuantity(movement.new_stock)}`
+              : `${isPositive ? "+" : "−"}${formatQuantity(movement.quantity)}`}
           </Text>
         </View>
 
-        <Text style={styles.productText}>
-          Produto #{movement.product_id}
-        </Text>
+        <View style={styles.productInfo}>
+          <Text style={styles.productText} numberOfLines={1}>
+            {movement.product_name}
+          </Text>
+
+          <Text style={styles.productSku}>SKU · {movement.product_sku}</Text>
+        </View>
 
         <View style={styles.movementMeta}>
           <Text style={styles.metaText}>
-            Estoque:{" "}
-            {formatQuantity(
-              movement.previous_stock,
-            )}
+            Estoque: {formatQuantity(movement.previous_stock)}
             {" → "}
-            {formatQuantity(
-              movement.new_stock,
-            )}
+            {formatQuantity(movement.new_stock)}
           </Text>
 
-          <Text style={styles.metaText}>
-            {formatDate(movement.created_at)}
-          </Text>
+          <Text style={styles.metaText}>{formatDate(movement.created_at)}</Text>
         </View>
 
         {movement.reason ? (
-          <Text
-            style={styles.reason}
-            numberOfLines={1}
-          >
+          <Text style={styles.reason} numberOfLines={1}>
             {movement.reason}
           </Text>
         ) : null}
@@ -214,35 +188,25 @@ function MovementCard({
 }
 
 export default function MovementsScreen() {
-  const { accessToken } = useAuth();
+  const { accessToken, user } = useAuth();
 
   const router = useRouter();
 
-  const [movements, setMovements] = useState<
-    StockMovement[]
-  >([]);
+  const [movements, setMovements] = useState<StockMovement[]>([]);
 
-  const [selectedFilter, setSelectedFilter] =
-    useState<MovementFilter>("ALL");
+  const [selectedFilter, setSelectedFilter] = useState<MovementFilter>("ALL");
 
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
 
   const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] =
-    useState(false);
-  const [loadingMore, setLoadingMore] =
-    useState(false);
-  const [error, setError] = useState<
-    string | null
-  >(null);
+  const [refreshing, setRefreshing] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const loadMovements = useCallback(
-    async (
-      nextPage = 1,
-      append = false,
-    ) => {
+    async (nextPage = 1, append = false) => {
       if (!accessToken) {
         return;
       }
@@ -256,23 +220,14 @@ export default function MovementsScreen() {
           setLoading(true);
         }
 
-        const response =
-          await getStockMovements(
-            accessToken,
-            {
-              page: nextPage,
-              pageSize: 20,
-              movementType:
-                selectedFilter === "ALL"
-                  ? undefined
-                  : selectedFilter,
-            },
-          );
+        const response = await getStockMovements(accessToken, {
+          page: nextPage,
+          pageSize: 20,
+          movementType: selectedFilter === "ALL" ? undefined : selectedFilter,
+        });
 
         setMovements((current) =>
-          append
-            ? [...current, ...response.items]
-            : response.items,
+          append ? [...current, ...response.items] : response.items,
         );
 
         setPage(response.page);
@@ -290,11 +245,7 @@ export default function MovementsScreen() {
         setLoadingMore(false);
       }
     },
-    [
-      accessToken,
-      refreshing,
-      selectedFilter,
-    ],
+    [accessToken, refreshing, selectedFilter],
   );
 
   useEffect(() => {
@@ -306,9 +257,7 @@ export default function MovementsScreen() {
     loadMovements(1, false);
   }
 
-  function handleFilterChange(
-    filter: MovementFilter,
-  ) {
+  function handleFilterChange(filter: MovementFilter) {
     if (filter === selectedFilter) {
       return;
     }
@@ -318,15 +267,22 @@ export default function MovementsScreen() {
   }
 
   function handleLoadMore() {
-    if (
-      loading ||
-      loadingMore ||
-      page >= totalPages
-    ) {
+    if (loading || loadingMore || page >= totalPages || !accessToken) {
       return;
     }
 
     loadMovements(page + 1, true);
+  }
+
+  function handleScrollEndDrag(event: NativeSyntheticEvent<NativeScrollEvent>) {
+    const { contentOffset, contentSize, layoutMeasurement } = event.nativeEvent;
+
+    const distanceFromBottom =
+      contentSize.height - (contentOffset.y + layoutMeasurement.height);
+
+    if (distanceFromBottom <= 100) {
+      handleLoadMore();
+    }
   }
 
   return (
@@ -341,40 +297,29 @@ export default function MovementsScreen() {
             tintColor={colors.brand[500]}
           />
         }
-        onScrollEndDrag={handleLoadMore}
+        onScrollEndDrag={handleScrollEndDrag}
         scrollEventThrottle={16}
       >
         <View style={styles.header}>
-  <View style={styles.headerText}>
-    <Text style={styles.eyebrow}>
-      ESTOQUE
-    </Text>
+          <View style={styles.headerText}>
+            <Text style={styles.eyebrow}>ESTOQUE</Text>
 
-    <Text style={styles.title}>
-      Movimentações
-    </Text>
+            <Text style={styles.title}>Movimentações</Text>
 
-    <Text style={styles.description}>
-      Acompanhe entradas, saídas e ajustes
-      realizados no estoque.
-    </Text>
-  </View>
+            <Text style={styles.description}>
+              Acompanhe entradas, saídas e ajustes realizados no estoque.
+            </Text>
+          </View>
 
-  <Pressable
-    onPress={() =>
-      router.push(
-        "/(tabs)/movement-create",
-      )
-    }
-    style={styles.addButton}
-  >
-    <Ionicons
-      name="add"
-      size={22}
-      color={colors.text.inverse}
-    />
-  </Pressable>
-</View>
+          {user?.role === "ADMIN" && (
+            <Pressable
+              onPress={() => router.push("/(tabs)/movement-create")}
+              style={styles.addButton}
+            >
+              <Ionicons name="add" size={22} color={colors.text.inverse} />
+            </Pressable>
+          )}
+        </View>
 
         <View style={styles.summaryCard}>
           <View style={styles.summaryIcon}>
@@ -386,53 +331,36 @@ export default function MovementsScreen() {
           </View>
 
           <View style={styles.summaryContent}>
-            <Text style={styles.summaryLabel}>
-              Total de movimentações
-            </Text>
+            <Text style={styles.summaryLabel}>Total de movimentações</Text>
 
-            <Text style={styles.summaryValue}>
-              {total}
-            </Text>
+            <Text style={styles.summaryValue}>{total}</Text>
           </View>
         </View>
 
         <View style={styles.filterSection}>
-          <Text style={styles.filterTitle}>
-            Filtrar por tipo
-          </Text>
+          <Text style={styles.filterTitle}>Filtrar por tipo</Text>
 
           <ScrollView
             horizontal
             showsHorizontalScrollIndicator={false}
-            contentContainerStyle={
-              styles.filterList
-            }
+            contentContainerStyle={styles.filterList}
           >
             {filters.map((filter) => {
-              const selected =
-                selectedFilter === filter.key;
+              const selected = selectedFilter === filter.key;
 
               return (
                 <Pressable
                   key={filter.key}
-                  onPress={() =>
-                    handleFilterChange(
-                      filter.key,
-                    )
-                  }
+                  onPress={() => handleFilterChange(filter.key)}
                   style={[
                     styles.filterButton,
-                    selected
-                      ? styles.filterButtonActive
-                      : undefined,
+                    selected ? styles.filterButtonActive : undefined,
                   ]}
                 >
                   <Text
                     style={[
                       styles.filterText,
-                      selected
-                        ? styles.filterTextActive
-                        : undefined,
+                      selected ? styles.filterTextActive : undefined,
                     ]}
                   >
                     {filter.label}
@@ -445,9 +373,7 @@ export default function MovementsScreen() {
 
         <View style={styles.historyHeader}>
           <View>
-            <Text style={styles.historyTitle}>
-              Histórico
-            </Text>
+            <Text style={styles.historyTitle}>Histórico</Text>
 
             <Text style={styles.historyDescription}>
               Registros mais recentes
@@ -455,10 +381,7 @@ export default function MovementsScreen() {
           </View>
 
           {loading ? (
-            <ActivityIndicator
-              size="small"
-              color={colors.brand[500]}
-            />
+            <ActivityIndicator size="small" color={colors.brand[500]} />
           ) : null}
         </View>
 
@@ -472,30 +395,20 @@ export default function MovementsScreen() {
               />
             </View>
 
-            <Text style={styles.feedbackTitle}>
-              Não foi possível carregar
-            </Text>
+            <Text style={styles.feedbackTitle}>Não foi possível carregar</Text>
 
-            <Text style={styles.feedbackText}>
-              {error}
-            </Text>
+            <Text style={styles.feedbackText}>{error}</Text>
 
             <Pressable
-              onPress={() =>
-                loadMovements(1, false)
-              }
+              onPress={() => loadMovements(1, false)}
               style={styles.retryButton}
             >
-              <Text style={styles.retryText}>
-                Tentar novamente
-              </Text>
+              <Text style={styles.retryText}>Tentar novamente</Text>
             </Pressable>
           </View>
         ) : null}
 
-        {!loading &&
-        !error &&
-        movements.length === 0 ? (
+        {!loading && !error && movements.length === 0 ? (
           <View style={styles.emptyCard}>
             <View style={styles.emptyIcon}>
               <Ionicons
@@ -505,13 +418,10 @@ export default function MovementsScreen() {
               />
             </View>
 
-            <Text style={styles.emptyTitle}>
-              Nenhuma movimentação
-            </Text>
+            <Text style={styles.emptyTitle}>Nenhuma movimentação</Text>
 
             <Text style={styles.emptyText}>
-              Ainda não existem registros para o
-              filtro selecionado.
+              Ainda não existem registros para o filtro selecionado.
             </Text>
           </View>
         ) : null}
@@ -519,18 +429,12 @@ export default function MovementsScreen() {
         {!error && movements.length > 0 ? (
           <View style={styles.movementList}>
             {movements.map((movement) => (
-              <MovementCard
-                key={movement.id}
-                movement={movement}
-              />
+              <MovementCard key={movement.id} movement={movement} />
             ))}
 
             {loadingMore ? (
               <View style={styles.loadingMore}>
-                <ActivityIndicator
-                  size="small"
-                  color={colors.brand[500]}
-                />
+                <ActivityIndicator size="small" color={colors.brand[500]} />
               </View>
             ) : null}
           </View>
@@ -550,7 +454,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     ...shadows.floating,
   },
-  
+
   container: {
     flex: 1,
     backgroundColor: colors.background.light,
@@ -562,7 +466,7 @@ const styles = StyleSheet.create({
     paddingBottom: spacing[12],
   },
 
-    header: {
+  header: {
     marginBottom: spacing[5],
     flexDirection: "row",
     alignItems: "flex-start",
@@ -572,7 +476,6 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingRight: spacing[3],
   },
-
 
   eyebrow: {
     color: colors.teal[600],
@@ -741,6 +644,18 @@ const styles = StyleSheet.create({
     color: colors.text.secondary,
     fontSize: 12,
     marginTop: 3,
+  },
+
+  productInfo: {
+    flex: 1,
+    minWidth: 0,
+    marginTop: 3,
+  },
+
+  productSku: {
+    color: colors.text.muted,
+    fontSize: 10,
+    marginTop: 2,
   },
 
   movementMeta: {

@@ -1,6 +1,9 @@
+
 from datetime import date, datetime, time, timedelta
 
 from app.db.database import get_db
+from app.core.inventory_owner import resolve_inventory_owner_id
+from app.modules.auth.role_dependencies import require_admin
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.stock_movements.stock_movement_schema import (
     StockMovementCreate,
@@ -29,28 +32,14 @@ router = APIRouter(
 def create(
     data: StockMovementCreate,
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_admin=Depends(require_admin),
 ):
-    if (
-        data.movement_type == "ADJUSTMENT"
-        and current_user.role != "ADMIN"
-    ):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin access required for stock adjustments.",
-        )
-
-    try:
-        return create_stock_movement(
-            db,
-            data,
-            user_id=current_user.id,
-        )
-    except ValueError as error:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(error),
-        ) from error
+    return create_stock_movement(
+        db=db,
+        data=data,
+        user_id=current_admin.id,
+        owner_id=current_admin.id,
+    )
 
 
 @router.get(
@@ -58,41 +47,19 @@ def create(
     response_model=StockMovementListResponse,
 )
 def list_all(
-    page: int = Query(
-        default=1,
-        ge=1,
-    ),
-    page_size: int = Query(
-        default=20,
-        ge=1,
-        le=100,
-    ),
-    product_id: int | None = Query(
-        default=None,
-        gt=0,
-    ),
-    movement_type: str | None = Query(
-        default=None,
-    ),
-    start_date: date | None = Query(
-        default=None,
-    ),
-    end_date: date | None = Query(
-        default=None,
-    ),
+    page: int = Query(default=1, ge=1),
+    page_size: int = Query(default=20, ge=1, le=100),
+    product_id: int | None = Query(default=None, gt=0),
+    movement_type: str | None = Query(default=None),
+    start_date: date | None = Query(default=None),
+    end_date: date | None = Query(default=None),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     if movement_type is not None:
         movement_type = movement_type.strip().upper()
 
-        allowed_types = {
-            "IN",
-            "OUT",
-            "ADJUSTMENT",
-        }
-
-        if movement_type not in allowed_types:
+        if movement_type not in {"IN", "OUT", "ADJUSTMENT"}:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="movement_type must be IN, OUT or ADJUSTMENT.",
@@ -108,25 +75,22 @@ def list_all(
             detail="start_date must be before or equal to end_date.",
         )
 
-    start_datetime = None
+    start_datetime = (
+        datetime.combine(start_date, time.min)
+        if start_date is not None
+        else None
+    )
 
-    if start_date is not None:
-        start_datetime = datetime.combine(
-            start_date,
-            time.min,
-        )
-
-    end_datetime = None
-
-    if end_date is not None:
-        end_datetime = datetime.combine(
-            end_date + timedelta(days=1),
-            time.min,
-        )
+    end_datetime = (
+        datetime.combine(end_date + timedelta(days=1), time.min)
+        if end_date is not None
+        else None
+    )
 
     try:
         movements, total, total_pages = list_movements(
             db=db,
+            owner_id=resolve_inventory_owner_id(db, current_user),
             page=page,
             page_size=page_size,
             product_id=product_id,
@@ -160,13 +124,12 @@ def list_by_product(
 ):
     try:
         return list_product_movements(
-            db,
-            product_id,
+            db=db,
+            product_id=product_id,
+            owner_id=resolve_inventory_owner_id(db, current_user),
         )
     except ValueError as error:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
-
-

@@ -47,22 +47,33 @@ def create_product(
     min_stock: int,
     is_active: bool = True,
 ):
-    category = db.query(Category).filter(
-        Category.name == "Categoria Dashboard"
+    owner = db.query(User).filter(
+        User.email == "dashboard@example.com"
     ).first()
 
-    if not category:
+    if owner is None:
+        raise AssertionError(
+            "Cadastre o usuário do dashboard antes de criar produtos."
+        )
+
+    category = db.query(Category).filter(
+        Category.name == "Categoria Dashboard",
+        Category.owner_id == owner.id,
+    ).first()
+
+    if category is None:
         category = Category(
             name="Categoria Dashboard",
             description="Categoria para testes do dashboard",
             is_active=True,
+            owner_id=owner.id,
         )
-
         db.add(category)
         db.commit()
         db.refresh(category)
 
     product = Product(
+        owner_id=owner.id,
         name=name,
         sku=sku,
         description="Produto para teste do dashboard",
@@ -133,6 +144,13 @@ def test_dashboard_summary_returns_stock_statistics(
 
     create_product(
         db,
+
+
+
+
+
+
+
         name="Produto Normal",
         sku="DASH-001",
         current_stock=20,

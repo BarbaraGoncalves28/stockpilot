@@ -29,6 +29,5 @@ export type CreateCategoryInput = {
 
 export type UpdateCategoryInput = {
   name?: string;
-  description?: string;
-  is_active?: boolean;
+  description?: string | null;
 };

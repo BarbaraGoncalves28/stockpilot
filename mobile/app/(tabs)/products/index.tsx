@@ -8,11 +8,10 @@ import {
   TouchableOpacity,
   View,
 } from "react-native";
-import {
-  useCallback,
+import { Ionicons } from "@expo/vector-icons";
+import { useCallback,
   useEffect,
-  useState,
-} from "react";
+  useState, useRef } from "react";
 import { router } from "expo-router";
 
 import { useAuth } from "../../../src/auth/AuthContext";
@@ -72,7 +71,7 @@ function ProductCard({
     <TouchableOpacity
       activeOpacity={0.85}
       onPress={() =>
-        router.push(`/products/${product.id}`)
+        router.push(`/(tabs)/products/${product.id}`)
       }
       style={styles.productCard}
     >
@@ -97,6 +96,19 @@ function ProductCard({
           <Text style={styles.productSku}>
             SKU · {product.sku}
           </Text>
+
+          <Text
+  style={[
+    styles.productStatus,
+    {
+      color: product.is_active
+        ? colors.teal[700]
+        : colors.coral[600],
+    },
+  ]}
+>
+  {product.is_active ? "Ativo" : "Inativo"}
+</Text>
         </View>
 
         <View
@@ -179,6 +191,12 @@ export default function ProductsScreen() {
     useState(false);
   const [error, setError] = useState("");
 
+  const [statusFilter, setStatusFilter] = useState<
+  "ALL" | "ACTIVE" | "INACTIVE"
+>("ALL");
+
+  const requestIdRef = useRef(0);
+
   const loadProducts = useCallback(
     async (
       page = 1,
@@ -186,12 +204,15 @@ export default function ProductsScreen() {
         refresh?: boolean;
         append?: boolean;
         searchTerm?: string;
+        silent?: boolean;
       } = {},
     ) => {
       if (!accessToken) {
         router.replace("/");
         return;
       }
+
+      const requestId = ++requestIdRef.current;
 
       try {
         setError("");
@@ -200,20 +221,25 @@ export default function ProductsScreen() {
           setRefreshing(true);
         } else if (options.append) {
           setLoadingMore(true);
-        } else {
+        } else if (!options.silent) {
           setLoading(true);
         }
 
-        const response = await getProducts(
-          accessToken,
-          {
-            page,
-            pageSize: 20,
-            search:
-              options.searchTerm ?? search,
-            isActive: true,
-          },
-        );
+        const response = await getProducts(accessToken, {
+          page,
+          pageSize: 5,
+          search: options.searchTerm ?? search,
+          isActive:
+            user?.role !== "ADMIN"
+              ? true
+              : statusFilter === "ALL"
+                ? undefined
+                : statusFilter === "ACTIVE",
+        });
+
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
 
         if (options.append) {
           setProducts((current) => [
@@ -226,43 +252,35 @@ export default function ProductsScreen() {
 
         setPagination(response);
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Não foi possível carregar os produtos.",
-        );
+        if (requestId === requestIdRef.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Não foi possível carregar os produtos.",
+          );
+        }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
-        setLoadingMore(false);
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [accessToken, search],
+    [accessToken, search, statusFilter, user?.role],
   );
 
   useEffect(() => {
-    loadProducts(1);
+    loadProducts(1, { silent: true });
   }, [loadProducts]);
 
-  function handleSearch() {
-    const normalizedSearch =
-      searchValue.trim();
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      setSearch(searchValue.trim());
+    }, 300);
 
-    setSearch(normalizedSearch);
-
-    loadProducts(1, {
-      searchTerm: normalizedSearch,
-    });
-  }
-
-  function handleClearSearch() {
-    setSearchValue("");
-    setSearch("");
-
-    loadProducts(1, {
-      searchTerm: "",
-    });
-  }
+    return () => clearTimeout(timeoutId);
+  }, [searchValue]);
 
   function handleRefresh() {
     loadProducts(1, {
@@ -279,9 +297,7 @@ export default function ProductsScreen() {
       return;
     }
 
-    loadProducts(pagination.page + 1, {
-      append: true,
-    });
+    loadProducts(pagination.page + 1);
   }
 
   if (!accessToken || !user) {
@@ -295,7 +311,7 @@ export default function ProductsScreen() {
     );
   }
 
-  if (loading) {
+  if (loading && products.length === 0) {
     return (
       <View style={styles.centered}>
         <ActivityIndicator
@@ -334,8 +350,6 @@ export default function ProductsScreen() {
             tintColor={colors.brand[500]}
           />
         }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.3}
         ListHeaderComponent={
           <View>
             <View style={styles.header}>
@@ -350,7 +364,11 @@ export default function ProductsScreen() {
 
                 <Text style={styles.subtitle}>
                   {pagination?.total ?? 0}{" "}
-                  produtos ativos
+{statusFilter === "INACTIVE"
+  ? "produtos inativos"
+  : statusFilter === "ALL"
+    ? "produtos encontrados"
+    : "produtos ativos"}
                 </Text>
               </View>
 
@@ -374,11 +392,10 @@ export default function ProductsScreen() {
             </View>
 
             <View style={styles.searchContainer}>
+              <Ionicons name="search-outline" size={19} color={colors.text.muted} />
               <TextInput
                 value={searchValue}
                 onChangeText={setSearchValue}
-                onSubmitEditing={handleSearch}
-                returnKeyType="search"
                 placeholder="Buscar por nome ou SKU"
                 placeholderTextColor={
                   colors.text.muted
@@ -389,7 +406,7 @@ export default function ProductsScreen() {
               {searchValue ? (
                 <TouchableOpacity
                   activeOpacity={0.7}
-                  onPress={handleClearSearch}
+                  onPress={() => setSearchValue("")}
                   style={styles.clearButton}
                 >
                   <Text
@@ -400,18 +417,45 @@ export default function ProductsScreen() {
                 </TouchableOpacity>
               ) : null}
 
-              <TouchableOpacity
-                activeOpacity={0.85}
-                onPress={handleSearch}
-                style={styles.searchButton}
-              >
-                <Text
-                  style={styles.searchButtonText}
-                >
-                  Buscar
-                </Text>
-              </TouchableOpacity>
             </View>
+
+            {user.role === "ADMIN" ? (
+  <View style={styles.statusFilters}>
+    {(
+      [
+        { label: "Todos", value: "ALL" },
+        { label: "Ativos", value: "ACTIVE" },
+        { label: "Inativos", value: "INACTIVE" },
+      ] as const
+    ).map((filter) => {
+      const selected =
+        statusFilter === filter.value;
+
+      return (
+        <TouchableOpacity
+          key={filter.value}
+          activeOpacity={0.8}
+          style={[
+            styles.statusFilterButton,
+            selected && styles.statusFilterButtonSelected,
+          ]}
+          onPress={() =>
+            setStatusFilter(filter.value)
+          }
+        >
+          <Text
+            style={[
+              styles.statusFilterText,
+              selected && styles.statusFilterTextSelected,
+            ]}
+          >
+            {filter.label}
+          </Text>
+        </TouchableOpacity>
+      );
+    })}
+  </View>
+) : null}
 
             {error ? (
               <View style={styles.errorBox}>
@@ -448,7 +492,11 @@ export default function ProductsScreen() {
             <Text style={styles.emptyTitle}>
               {search
                 ? "Nenhum produto encontrado"
-                : "Nenhum produto cadastrado"}
+                : statusFilter === "INACTIVE"
+                  ? "Nenhum produto inativo encontrado"
+                  : statusFilter === "ACTIVE"
+                    ? "Nenhum produto ativo encontrado"
+                    : "Nenhum produto cadastrado"}
             </Text>
 
             <Text
@@ -456,13 +504,18 @@ export default function ProductsScreen() {
             >
               {search
                 ? "Tente buscar usando outro nome ou SKU."
-                : user.role === "ADMIN"
-                  ? "Cadastre seu primeiro produto para começar a controlar o estoque."
-                  : "Ainda não existem produtos ativos cadastrados."}
+                : statusFilter === "INACTIVE"
+                  ? "Os produtos que forem inativados aparecerão aqui."
+                  : statusFilter === "ACTIVE"
+                    ? user.role === "ADMIN"
+                      ? "Não há produtos ativos para exibir. Confira o filtro Todos ou cadastre um produto."
+                      : "Ainda não existem produtos ativos cadastrados."
+                    : user.role === "ADMIN"
+                      ? "Cadastre seu primeiro produto para começar a controlar o estoque."
+                      : "Ainda não existem produtos cadastrados."}
             </Text>
 
-            {!search &&
-            user.role === "ADMIN" ? (
+            {!search && statusFilter !== "INACTIVE" && user.role === "ADMIN" ? (
               <TouchableOpacity
                 activeOpacity={0.85}
                 style={styles.emptyButton}
@@ -482,12 +535,25 @@ export default function ProductsScreen() {
           </View>
         }
         ListFooterComponent={
-          loadingMore ? (
-            <View style={styles.loadingMore}>
-              <ActivityIndicator
-                size="small"
-                color={colors.brand[500]}
-              />
+          pagination && pagination.total_pages > 1 ? (
+            <View style={{ flexDirection: "row", alignItems: "center", justifyContent: "center", gap: 20, paddingVertical: 20 }}>
+              <TouchableOpacity
+                disabled={loading || pagination.page <= 1}
+                onPress={() => loadProducts(pagination.page - 1)}
+                style={{ padding: 10, opacity: loading || pagination.page <= 1 ? 0.35 : 1 }}
+              >
+                <Ionicons name="chevron-back" size={22} color={colors.brand[500]} />
+              </TouchableOpacity>
+              <Text style={{ color: colors.text.primary, fontSize: 13 }}>
+                Página {pagination.page} de {pagination.total_pages}
+              </Text>
+              <TouchableOpacity
+                disabled={loading || pagination.page >= pagination.total_pages}
+                onPress={handleLoadMore}
+                style={{ padding: 10, opacity: loading || pagination.page >= pagination.total_pages ? 0.35 : 1 }}
+              >
+                <Ionicons name="chevron-forward" size={22} color={colors.brand[500]} />
+              </TouchableOpacity>
             </View>
           ) : null
         }
@@ -504,8 +570,8 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[8],
-    paddingBottom: spacing[8],
+    paddingTop: spacing[7],
+    paddingBottom: spacing[10],
   },
 
   emptyContent: {
@@ -529,7 +595,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: spacing[5],
+    marginBottom: spacing[6],
   },
 
   headerText: {
@@ -547,60 +613,65 @@ const styles = StyleSheet.create({
     color: colors.text.primary,
     fontSize: 28,
     fontWeight: "800",
+    letterSpacing: -0.5,
     marginTop: spacing[2],
   },
 
   subtitle: {
     color: colors.text.secondary,
-    fontSize: 13,
+    fontSize: 14,
+    lineHeight: 21,
     marginTop: spacing[1],
   },
 
   addButton: {
-    width: 46,
-    height: 46,
+    width: 48,
+    height: 48, 
     alignItems: "center",
-    justifyContent: "center",
-    borderRadius: radius.md,
+    justifyContent: "center", 
+    borderRadius: radius.lg,
     backgroundColor: colors.brand[500],
-    ...shadows.soft,
-  },
+    ...shadows.floating,
+  }, 
 
   addButtonText: {
     color: colors.text.inverse,
     fontSize: 28,
     fontWeight: "400",
-    lineHeight: 30,
+    lineHeight: 30, 
   },
 
   searchContainer: {
+    height: 50,
     flexDirection: "row",
     alignItems: "center",
+    gap: spacing[2],
     marginBottom: spacing[5],
+    backgroundColor: colors.surface.light,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing[3],
   },
 
   searchInput: {
     flex: 1,
-    height: 48,
-    paddingHorizontal: spacing[4],
-    paddingRight: spacing[10],
-    borderWidth: 1,
-    borderColor: colors.border.light,
-    borderRadius: radius.md,
-    backgroundColor: colors.surface.light,
+    height: "100%",
+    paddingHorizontal: 0,
+    paddingRight: 0,
     color: colors.text.primary,
-    fontSize: 13,
+    fontSize: 14,
   },
-
-  clearButton: {
+ 
+  clearButton: {  
     position: "absolute",
     right: 82,
-    width: 28,
-    height: 28,
+    width: 32,
+    height: 32,
     alignItems: "center",
     justifyContent: "center",
   },
-
+     
   clearButtonText: {
     color: colors.text.muted,
     fontSize: 22,
@@ -608,25 +679,25 @@ const styles = StyleSheet.create({
   },
 
   searchButton: {
-    height: 48,
+    height: 50,
     paddingHorizontal: spacing[4],
     alignItems: "center",
     justifyContent: "center",
     marginLeft: spacing[2],
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.brand[500],
-  },
+  },     
 
   searchButtonText: {
     color: colors.text.inverse,
-    fontSize: 12,
-    fontWeight: "700",
-  },
+    fontSize: 12, 
+    fontWeight: "700", 
+  },   
 
   errorBox: {
-    padding: spacing[3],
+    padding: spacing[4],
     marginBottom: spacing[4],
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.coral[50],
     borderWidth: 1,
     borderColor: colors.coral[100],
@@ -646,9 +717,9 @@ const styles = StyleSheet.create({
   },
 
   productCard: {
-    marginBottom: spacing[3],
-    padding: spacing[4],
-    borderRadius: radius.lg,
+    marginBottom: spacing[4],
+    padding: spacing[5],
+    borderRadius: radius.xl,
     backgroundColor: colors.surface.light,
     borderWidth: 1,
     borderColor: colors.border.light,
@@ -661,17 +732,17 @@ const styles = StyleSheet.create({
   },
 
   productIcon: {
-    width: 44,
-    height: 44,
+    width: 48,
+    height: 48,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.brand[50],
   },
-
+ 
   productIconText: {
-    color: colors.brand[600],
-    fontSize: 17,
+    color: colors.brand[600], 
+    fontSize: 18, 
     fontWeight: "800",
   },
 
@@ -684,7 +755,7 @@ const styles = StyleSheet.create({
 
   productName: {
     color: colors.text.primary,
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: "700",
   },
 
@@ -701,7 +772,7 @@ const styles = StyleSheet.create({
   },
 
   statusText: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "800",
   },
 
@@ -709,23 +780,23 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-end",
-    marginTop: spacing[4],
-    paddingTop: spacing[3],
+    marginTop: spacing[5],
+    paddingTop: spacing[4],
     borderTopWidth: 1,
     borderTopColor: colors.border.light,
   },
 
   stockLabel: {
     color: colors.text.muted,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
   },
 
   stockValue: {
     color: colors.text.primary,
-    fontSize: 17,
+    fontSize: 20,
     fontWeight: "800",
-    marginTop: 2,
+    marginTop: spacing[1],
   },
 
   stockUnit: {
@@ -740,15 +811,15 @@ const styles = StyleSheet.create({
 
   priceLabel: {
     color: colors.text.muted,
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "600",
   },
 
   priceValue: {
     color: colors.text.primary,
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: "800",
-    marginTop: 2,
+    marginTop: spacing[1],
   },
 
   emptyState: {
@@ -795,7 +866,7 @@ const styles = StyleSheet.create({
     marginTop: spacing[5],
     paddingHorizontal: spacing[5],
     paddingVertical: spacing[3],
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor: colors.brand[500],
   },
 
@@ -808,6 +879,50 @@ const styles = StyleSheet.create({
   loadingMore: {
     paddingVertical: spacing[5],
   },
+
+  productStatus: {
+  fontSize: 11,
+  fontWeight: "700",
+  marginTop: spacing[1],
+},
+
+statusFilters: {
+  flexDirection: "row",
+  gap: spacing[2],
+  marginBottom: spacing[5],
+},
+
+statusFilterButton: {
+  paddingHorizontal: spacing[4],
+  paddingVertical: spacing[3],
+  borderRadius: radius.full,
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  backgroundColor: colors.surface.light,
+},
+
+statusFilterButtonSelected: {
+  backgroundColor: colors.brand[500],
+  borderColor: colors.brand[500],
+},
+
+statusFilterText: {
+  color: colors.text.secondary,
+  fontSize: 12,
+  fontWeight: "700",
+},
+
+statusFilterTextSelected: {
+  color: colors.text.inverse,
+},
 });
+
+
+
+
+
+
+
+
 
 

@@ -14,6 +14,8 @@ export type LoginResponse = {
   user: AuthUser;
 };
 
+export type RegisterResponse = AuthUser;
+
 export async function login(
   email: string,
   password: string,
@@ -30,9 +32,38 @@ export async function login(
 
   if (!response.ok) {
     throw new Error(
-      data.message ?? "Não foi possível entrar.",
+      data.detail ??
+        data.message ??
+        "Não foi possível entrar.",
     );
   }
 
   return data as LoginResponse;
+}
+
+export async function register(
+  name: string,
+  email: string,
+  password: string,
+): Promise<RegisterResponse> {
+  const response = await apiFetch("/auth/register", {
+    method: "POST",
+    body: JSON.stringify({
+      name,
+      email,
+      password,
+    }),
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.detail ??
+        data.message ??
+        "Não foi possível criar sua conta.",
+    );
+  }
+
+  return data as RegisterResponse;
 }

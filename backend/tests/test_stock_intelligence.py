@@ -7,16 +7,24 @@ from app.models.user import User
 
 
 def create_category(db):
+    owner = db.query(User).filter(
+        User.email == "intelligence@example.com"
+    ).first()
+
+    if owner is None:
+        raise AssertionError(
+            "Cadastre o usuário antes de criar a categoria."
+        )
+
     category = Category(
         name="Categoria Intelligence",
         description="Categoria para testes de inteligência de estoque",
         is_active=True,
+        owner_id=owner.id,
     )
-
     db.add(category)
     db.commit()
     db.refresh(category)
-
     return category
 
 
@@ -29,6 +37,15 @@ def create_product(
     current_stock: int,
     min_stock: int,
 ):
+    owner = db.query(User).filter(
+        User.email == "intelligence@example.com"
+    ).first()
+
+    if owner is None:
+        raise AssertionError(
+            "Cadastre o usuário antes de criar o produto."
+        )
+
     product = Product(
         name=name,
         sku=sku,
@@ -42,12 +59,11 @@ def create_product(
         max_stock=100,
         unit="UN",
         is_active=True,
+        owner_id=owner.id,
     )
-
     db.add(product)
     db.commit()
     db.refresh(product)
-
     return product
 
 
@@ -390,12 +406,17 @@ def test_stock_intelligence_identifies_risk_levels(
     assert data["INT-008"]["risk_level"] == "NO_DATA"
     assert data["INT-009"]["risk_level"] == "OUT_OF_STOCK"
 
-
 def test_stock_intelligence_only_returns_active_products(
     client,
     db,
 ):
     headers = register_and_login(client)
+
+    owner = db.query(User).filter(
+        User.email == "intelligence@example.com"
+    ).first()
+
+    assert owner is not None
 
     category = create_category(db)
 
@@ -421,24 +442,26 @@ def test_stock_intelligence_only_returns_active_products(
         max_stock=100,
         unit="UN",
         is_active=False,
+        owner_id=owner.id,
     )
 
     db.add(inactive_product)
     db.commit()
+    db.refresh(inactive_product)
 
     response = client.get(
         "/stock-intelligence",
         headers=headers,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
     data = response.json()
 
-    product_ids = {
+    product_ids = [
         item["product_id"]
         for item in data
-    }
+    ]
 
     assert active_product.id in product_ids
     assert inactive_product.id not in product_ids
@@ -540,8 +563,6 @@ def test_stock_intelligence_orders_products_by_name(
     ]
 
 def test_stock_intelligence_accepts_custom_days(client, db):
-    category = create_category(db)
-
     headers = register_and_login(client)
 
     user = db.query(User).filter(
@@ -549,6 +570,8 @@ def test_stock_intelligence_accepts_custom_days(client, db):
     ).first()
 
     assert user is not None
+
+    category = create_category(db)
 
     product = create_product(
         db,
@@ -565,7 +588,10 @@ def test_stock_intelligence_accepts_custom_days(client, db):
         movement_type="OUT",
         quantity=60,
         user_id=user.id,
-        created_at=datetime.now(UTC).replace(tzinfo=None) - timedelta(days=5),
+        created_at=(
+            datetime.now(UTC).replace(tzinfo=None)
+            - timedelta(days=5)
+        ),
     )
 
     response = client.get(
@@ -573,7 +599,7 @@ def test_stock_intelligence_accepts_custom_days(client, db):
         headers=headers,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
     item = next(
         item
@@ -609,8 +635,9 @@ def test_stock_intelligence_product_requires_authentication(client):
 
     assert response.status_code == 401
 
-
 def test_stock_intelligence_returns_product_by_id(client, db):
+    headers = register_and_login(client)
+
     category = create_category(db)
 
     product = create_product(
@@ -622,16 +649,12 @@ def test_stock_intelligence_returns_product_by_id(client, db):
         min_stock=10,
     )
 
-    db.commit()
-
-    headers = register_and_login(client)
-
     response = client.get(
         f"/stock-intelligence/product/{product.id}",
         headers=headers,
     )
 
-    assert response.status_code == 200
+    assert response.status_code == 200, response.text
 
     data = response.json()
 

@@ -99,7 +99,7 @@ export default function CreateSupplierScreen() {
         address: address.trim() || undefined,
       });
 
-      router.replace("/suppliers");
+      router.replace("/(tabs)/more/suppliers");
     } catch (err) {
       setError(
         err instanceof Error

@@ -10,11 +10,7 @@ import {
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { router } from "expo-router";
-import {
-  useCallback,
-  useEffect,
-  useState,
-} from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 import { useAuth } from "../../../../src/auth/AuthContext";
 import {
@@ -30,7 +26,7 @@ import {
   spacing,
 } from "../../../../src/theme/spacing";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 export default function CategoriesScreen() {
   const {
@@ -43,6 +39,7 @@ export default function CategoriesScreen() {
   );
 
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
   const [total, setTotal] = useState(0);
   const [page, setPage] = useState(1);
   const [totalPages, setTotalPages] = useState(1);
@@ -51,6 +48,7 @@ export default function CategoriesScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const [error, setError] = useState("");
+  const requestIdRef = useRef(0);
 
   const isAdmin = user?.role === "ADMIN";
 
@@ -66,6 +64,8 @@ export default function CategoriesScreen() {
         return;
       }
 
+      const requestId = ++requestIdRef.current;
+
       try {
         if (replace) {
           setLoading(true);
@@ -75,49 +75,54 @@ export default function CategoriesScreen() {
 
         setError("");
 
-        const response = await getCategories(
-          accessToken,
-          {
-            page: nextPage,
-            pageSize: PAGE_SIZE,
-            search,
-            isActive: undefined,
-          },
-        );
+        const response = await getCategories(accessToken, {
+          page: nextPage,
+          pageSize: PAGE_SIZE,
+          search: debouncedSearch,
+          isActive: undefined,
+        });
 
-        setCategories((current) =>
-          replace
-            ? response.items
-            : [...current, ...response.items],
-        );
+        if (requestId !== requestIdRef.current) {
+          return;
+        }
+
+        setCategories(response.items);
 
         setPage(response.page);
         setTotal(response.total);
         setTotalPages(response.total_pages);
       } catch (err) {
-        setError(
-          err instanceof Error
-            ? err.message
-            : "Não foi possível carregar as categorias.",
-        );
+        if (requestId === requestIdRef.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Não foi possível carregar as categorias.",
+          );
+        }
       } finally {
-        setLoading(false);
-        setRefreshing(false);
-        setLoadingMore(false);
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setRefreshing(false);
+          setLoadingMore(false);
+        }
       }
     },
-    [accessToken, search],
+    [accessToken, debouncedSearch],
   );
 
   useEffect(() => {
     const timeout = setTimeout(() => {
-      loadCategories({
-        nextPage: 1,
-        replace: true,
-      });
-    }, 300);
+      setDebouncedSearch(search.trim());
+    }, 200);
 
     return () => clearTimeout(timeout);
+  }, [search]);
+
+  useEffect(() => {
+    loadCategories({
+      nextPage: 1,
+      replace: true,
+    });
   }, [loadCategories]);
 
   function handleRefresh() {
@@ -129,20 +134,21 @@ export default function CategoriesScreen() {
     });
   }
 
-  function handleLoadMore() {
-    if (
-      loading ||
-      loadingMore ||
-      page >= totalPages
-    ) {
-      return;
-    }
-
-    loadCategories({
-      nextPage: page + 1,
-      replace: false,
-    });
+function handlePageChange(targetPage: number) {
+  if (
+    loading ||
+    targetPage < 1 ||
+    targetPage > totalPages ||
+    targetPage === page
+  ) {
+    return;
   }
+
+  loadCategories({
+    nextPage: targetPage,
+    replace: true,
+  });
+}
 
   function renderCategory({
     item,
@@ -156,8 +162,11 @@ export default function CategoriesScreen() {
           pressed && styles.cardPressed,
         ]}
         onPress={() =>
-          router.push(`/categories/${item.id}`)
-        }
+          router.push({ 
+            pathname: "/(tabs)/more/categories/[id]",
+            params: { id: String(item.id) },
+        })
+      } 
       >
         <View style={styles.cardIcon}>
           <Ionicons
@@ -235,16 +244,37 @@ export default function CategoriesScreen() {
   }
 
   function renderFooter() {
-    if (!loadingMore) {
-      return <View style={styles.listFooter} />;
+    if (totalPages <= 1) {
+      return null;
     }
 
     return (
-      <View style={styles.loadingMore}>
-        <ActivityIndicator
-          size="small"
-          color={colors.brand[500]}
-        />
+      <View style={styles.pagination}>
+        <Pressable
+          disabled={page <= 1 || loading || loadingMore}
+          onPress={() => handlePageChange(page - 1)}
+          style={[
+            styles.pageButton,
+            (page <= 1 || loading || loadingMore) && styles.pageButtonDisabled,
+          ]}
+        >
+          <Ionicons name="chevron-back" size={18} color={colors.text.primary} />
+        </Pressable>
+
+        <Text style={styles.pageLabel}>
+          Página {page} de {totalPages}
+        </Text>
+
+        <Pressable
+          disabled={page >= totalPages || loading || loadingMore}
+          onPress={() => handlePageChange(page + 1)}
+          style={[
+            styles.pageButton,
+            (page >= totalPages || loading || loadingMore) && styles.pageButtonDisabled,
+          ]}
+        >
+          <Ionicons name="chevron-forward" size={18} color={colors.text.primary} />
+        </Pressable>
       </View>
     );
   }
@@ -285,8 +315,6 @@ export default function CategoriesScreen() {
             tintColor={colors.brand[500]}
           />
         }
-        onEndReached={handleLoadMore}
-        onEndReachedThreshold={0.4}
         ListHeaderComponent={
           <View>
             <View style={styles.header}>
@@ -317,8 +345,7 @@ export default function CategoriesScreen() {
                     style={styles.addButton}
                     onPress={() =>
                       router.push(
-                        "/categories/create",
-                      )
+                        "/(tabs)/more/categories/create")
                     }
                   >
                     <Ionicons
@@ -420,13 +447,7 @@ export default function CategoriesScreen() {
                 </View>
               ) : null}
 
-              {categories.length > 0 ? (
-                <Text style={styles.resultLabel}>
-                  {search.trim()
-                    ? `Resultados para "${search.trim()}"`
-                    : "Todas as categorias"}
-                </Text>
-              ) : null}
+
             </View>
           </View>
         }
@@ -460,7 +481,7 @@ export default function CategoriesScreen() {
                   style={styles.emptyButton}
                   onPress={() =>
                     router.push(
-                      "/categories/create",
+                      "/(tabs)/more/categories/create"
                     )
                   }
                 >
@@ -830,5 +851,33 @@ const styles = StyleSheet.create({
 
   listFooter: {
     height: spacing[4],
+  },
+  pagination: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[4],
+    paddingVertical: spacing[4],
+  },
+
+  pageButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.surface.light,
+  },
+
+  pageButtonDisabled: {
+    opacity: 0.35,
+  },
+
+  pageLabel: {
+    color: colors.text.secondary,
+    fontSize: 13,
+    fontWeight: "600",
   },
 });

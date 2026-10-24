@@ -1,5 +1,9 @@
+
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
+
+from sqlalchemy import func, select
+from sqlalchemy.orm import Session
 
 from app.models.product import Product
 from app.models.stock_movement import StockMovement
@@ -7,13 +11,12 @@ from app.modules.stock_intelligence.stock_intelligence_schema import (
     StockAlertItem,
     StockIntelligenceItem,
 )
-from sqlalchemy import func, select
-from sqlalchemy.orm import Session
 
 
 def calculate_average_daily_consumption(
     db: Session,
     product_id: int,
+    owner_id: int,
     days: int = 30,
 ) -> Decimal:
     period_start = (
@@ -25,15 +28,15 @@ def calculate_average_daily_consumption(
         select(func.coalesce(func.sum(StockMovement.quantity), 0))
         .where(
             StockMovement.product_id == product_id,
+            StockMovement.product.has(
+                Product.owner_id == owner_id
+            ),
             StockMovement.movement_type == "OUT",
             StockMovement.created_at >= period_start,
         )
     )
 
-    if total_consumption is None:
-        return Decimal(0)
-
-    return Decimal(total_consumption) / Decimal(days)
+    return Decimal(total_consumption or 0) / Decimal(days)
 
 
 def calculate_risk_level(
@@ -62,14 +65,16 @@ def calculate_risk_level(
 def build_stock_intelligence_item(
     db: Session,
     product: Product,
+    owner_id: int,
     days: int,
 ) -> StockIntelligenceItem:
     current_stock = Decimal(product.current_stock)
     min_stock = Decimal(product.min_stock)
 
     average_daily_consumption = calculate_average_daily_consumption(
-        db,
-        product.id,
+        db=db,
+        product_id=product.id,
+        owner_id=owner_id,
         days=days,
     )
 
@@ -86,9 +91,9 @@ def build_stock_intelligence_item(
         estimated_days_until_min_stock = None
 
     risk_level = calculate_risk_level(
-        current_stock,
-        min_stock,
-        estimated_days_until_min_stock,
+        current_stock=current_stock,
+        min_stock=min_stock,
+        estimated_days=estimated_days_until_min_stock,
     )
 
     return StockIntelligenceItem(
@@ -105,20 +110,25 @@ def build_stock_intelligence_item(
 
 def get_stock_intelligence(
     db: Session,
+    owner_id: int,
     days: int = 30,
 ) -> list[StockIntelligenceItem]:
     products = list(
         db.scalars(
             select(Product)
-            .where(Product.is_active.is_(True))
+            .where(
+                Product.owner_id == owner_id,
+                Product.is_active.is_(True),
+            )
             .order_by(Product.name.asc())
         ).all()
     )
 
     return [
         build_stock_intelligence_item(
-            db,
-            product,
+            db=db,
+            product=product,
+            owner_id=owner_id,
             days=days,
         )
         for product in products
@@ -128,26 +138,35 @@ def get_stock_intelligence(
 def get_stock_intelligence_product(
     db: Session,
     product_id: int,
+    owner_id: int,
     days: int = 30,
 ) -> StockIntelligenceItem:
-    product = db.get(Product, product_id)
+    product = db.scalar(
+        select(Product).where(
+            Product.id == product_id,
+            Product.owner_id == owner_id,
+        )
+    )
 
-    if not product or not product.is_active:
+    if product is None:
         raise ValueError("Product not found.")
 
     return build_stock_intelligence_item(
-        db,
-        product,
+        db=db,
+        product=product,
+        owner_id=owner_id,
         days=days,
     )
 
 
 def get_stock_intelligence_alerts(
     db: Session,
+    owner_id: int,
     days: int = 30,
 ) -> list[StockAlertItem]:
     intelligence = get_stock_intelligence(
-        db,
+        db=db,
+        owner_id=owner_id,
         days=days,
     )
 

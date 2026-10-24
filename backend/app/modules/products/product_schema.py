@@ -4,135 +4,81 @@ from decimal import Decimal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+VALID_UNITS = {"UN", "KG", "G", "L", "M", "CX", "PCT", "PAR"}
+
+
 class ProductCreate(BaseModel):
     name: str = Field(min_length=2, max_length=150)
-    sku: str = Field(min_length=1, max_length=50)
+    sku: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None)
     category_id: int = Field(gt=0)
-    supplier_id: int | None = Field(default=None, gt=0)
-    cost_price: Decimal = Field(
-        ge=0,
-        max_digits=12,
-        decimal_places=2,
-    )
-    sale_price: Decimal = Field(
-        ge=0,
-        max_digits=12,
-        decimal_places=2,
-    )
-    min_stock: Decimal = Field(
-        default=0,
-        ge=0,
-        max_digits=12,
-        decimal_places=3,
-    )
-    max_stock: Decimal | None = Field(
-        default=None,
-        ge=0,
-        max_digits=12,
-        decimal_places=3,
-    )
-    unit: str = Field(
-        default="UN",
-        min_length=1,
-        max_length=20,
-    )
+    supplier_id: int = Field(gt=0)
+    cost_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    sale_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
+    current_stock: Decimal = Field(default=0, ge=0, max_digits=12, decimal_places=3)
+    min_stock: Decimal = Field(default=0, ge=0, max_digits=12, decimal_places=3)
+    max_stock: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=3)
+    unit: str = Field(default="UN", min_length=1, max_length=3)
 
     @field_validator("sku")
     @classmethod
-    def normalize_sku(cls, value: str) -> str:
-        return value.strip().upper()
+    def normalize_sku(cls, value: str | None) -> str | None:
+        if value is None:
+            return None
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("SKU não pode ficar vazio.")
+        return normalized
 
     @field_validator("unit")
     @classmethod
     def normalize_unit(cls, value: str) -> str:
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if normalized not in VALID_UNITS:
+            raise ValueError("Unidade inválida.")
+        return normalized
 
     @field_validator("max_stock")
     @classmethod
-    def validate_max_stock(
-        cls,
-        value: Decimal | None,
-        info,
-    ) -> Decimal | None:
-        if value is None:
-            return None
-
-        min_stock = info.data.get("min_stock")
-
-        if min_stock is not None and value < min_stock:
-            raise ValueError(
-                "max_stock must be greater than or equal to min_stock."
-            )
-
+    def validate_max_stock(cls, value: Decimal | None, info) -> Decimal | None:
+        if value is not None:
+            min_stock = info.data.get("min_stock")
+            if min_stock is not None and value < min_stock:
+                raise ValueError("max_stock must be greater than or equal to min_stock.")
         return value
 
 
 class ProductUpdate(BaseModel):
-    name: str | None = Field(
-        default=None,
-        min_length=2,
-        max_length=150,
-    )
-    sku: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=50,
-    )
+    name: str | None = Field(default=None, min_length=2, max_length=150)
+    sku: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None)
     category_id: int | None = Field(default=None, gt=0)
     supplier_id: int | None = Field(default=None, gt=0)
-    cost_price: Decimal | None = Field(
-        default=None,
-        ge=0,
-        max_digits=12,
-        decimal_places=2,
-    )
-    sale_price: Decimal | None = Field(
-        default=None,
-        ge=0,
-        max_digits=12,
-        decimal_places=2,
-    )
-    min_stock: Decimal | None = Field(
-        default=None,
-        ge=0,
-        max_digits=12,
-        decimal_places=3,
-    )
-    max_stock: Decimal | None = Field(
-        default=None,
-        ge=0,
-        max_digits=12,
-        decimal_places=3,
-    )
-    unit: str | None = Field(
-        default=None,
-        min_length=1,
-        max_length=20,
-    )
+    cost_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    sale_price: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=2)
+    min_stock: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=3)
+    max_stock: Decimal | None = Field(default=None, ge=0, max_digits=12, decimal_places=3)
+    unit: str | None = Field(default=None, min_length=1, max_length=3)
 
     @field_validator("sku")
     @classmethod
-    def normalize_sku(
-        cls,
-        value: str | None,
-    ) -> str | None:
+    def normalize_sku(cls, value: str | None) -> str | None:
         if value is None:
             return None
-
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if not normalized:
+            raise ValueError("SKU não pode ficar vazio.")
+        return normalized
 
     @field_validator("unit")
     @classmethod
-    def normalize_unit(
-        cls,
-        value: str | None,
-    ) -> str | None:
+    def normalize_unit(cls, value: str | None) -> str | None:
         if value is None:
             return None
-
-        return value.strip().upper()
+        normalized = value.strip().upper()
+        if normalized not in VALID_UNITS:
+            raise ValueError("Unidade inválida.")
+        return normalized
 
 
 class ProductResponse(BaseModel):
@@ -161,5 +107,3 @@ class ProductListResponse(BaseModel):
     page_size: int
     total: int
     total_pages: int
-
-

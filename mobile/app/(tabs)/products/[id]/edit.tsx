@@ -2,6 +2,8 @@ import {
   ActivityIndicator,
   KeyboardAvoidingView,
   Platform,
+  Modal,
+  Pressable,
   ScrollView,
   StyleSheet,
   Text,
@@ -29,6 +31,10 @@ import {
   shadows,
   spacing,
 } from "../../../../src/theme/spacing";
+import { getCategories } from "../../../../src/modules/categories/categoryService";
+import type { Category } from "../../../../src/modules/categories/category.types";
+import { getSuppliers } from "../../../../src/modules/suppliers/supplierService";
+import type { Supplier } from "../../../../src/modules/suppliers/supplier.types";
 
 function FormInput({
   label,
@@ -103,6 +109,8 @@ export default function EditProductScreen() {
   const [maxStock, setMaxStock] =
     useState("");
   const [unit, setUnit] = useState("");
+  const [unitDropdownOpen, setUnitDropdownOpen] = useState(false);
+
 
   const [loading, setLoading] =
     useState(true);
@@ -112,6 +120,118 @@ export default function EditProductScreen() {
 
   const [error, setError] =
     useState("");
+    
+const [categories, setCategories] = useState<Category[]>([]);
+  const [suppliers, setSuppliers] = useState<Supplier[]>([]);
+const [categoriesLoading, setCategoriesLoading] = useState(true);
+const [categoryDropdownOpen, setCategoryDropdownOpen] = useState(false);
+const [supplierDropdownOpen, setSupplierDropdownOpen] = useState(false);
+const [suppliersLoading, setSuppliersLoading] = useState(true);
+const [supplierModalVisible, setSupplierModalVisible] = useState(false);
+
+useEffect(() => {
+  if (!accessToken) {
+    setSuppliersLoading(false);
+    return;
+  }
+
+  let isMounted = true;
+
+  async function loadSuppliers() {
+    try {
+      setSuppliersLoading(true);
+
+      const firstPage = await getSuppliers(accessToken!, {
+        page: 1,
+        pageSize: 20,
+      });
+
+      const allSuppliers = [...firstPage.items];
+
+      for (let page = 2; page <= firstPage.total_pages; page++) {
+        const response = await getSuppliers(accessToken!, {
+          page,
+          pageSize: 20,
+        });
+
+        allSuppliers.push(...response.items);
+      }
+
+      if (isMounted) {
+        setSuppliers(allSuppliers);
+      }
+    } catch (err) {
+      if (isMounted) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível carregar os fornecedores.",
+        );
+      }
+    } finally {
+      if (isMounted) {
+        setSuppliersLoading(false);
+      }
+    }
+  }
+
+  void loadSuppliers();
+
+  return () => {
+    isMounted = false;
+  };
+}, [accessToken]);
+
+useEffect(() => {
+  if (!accessToken) return;
+
+  let isMounted = true;
+
+  async function loadCategories() {
+    try {
+      const firstPage = await getCategories(accessToken!, {
+        page: 1,
+        pageSize: 20,
+        isActive: true,
+      });
+
+      const allCategories = [...firstPage.items];
+
+      for (let page = 2; page <= firstPage.total_pages; page++) {
+        const response = await getCategories(accessToken!, {
+          page,
+          pageSize: 20,
+          isActive: true,
+        });
+
+        allCategories.push(...response.items);
+      }
+
+      if (isMounted) {
+        setCategories(allCategories);
+      }
+    } catch (err) {
+      if (isMounted) {
+        setError(
+          err instanceof Error
+            ? err.message
+            : "Não foi possível carregar as categorias.",
+        );
+      }
+    } finally {
+      if (isMounted) {
+        setCategoriesLoading(false);
+      }
+    }
+  }
+
+  void loadCategories();
+
+  return () => {
+    isMounted = false;
+  };
+}, [accessToken]);
+
 
   const loadProduct = useCallback(
     async () => {
@@ -195,9 +315,6 @@ export default function EditProductScreen() {
     const trimmedName =
       name.trim();
 
-    const trimmedSku =
-      sku.trim();
-
     const trimmedCategoryId =
       categoryId.trim();
 
@@ -220,12 +337,7 @@ export default function EditProductScreen() {
       return;
     }
 
-    if (!trimmedSku) {
-      setError(
-        "Informe o SKU do produto.",
-      );
-      return;
-    }
+
 
     if (!trimmedCategoryId) {
       setError(
@@ -277,16 +389,14 @@ export default function EditProductScreen() {
       return;
     }
 
+    const parsedSupplierId = Number(supplierId.trim());
+
     if (
-      supplierId.trim() &&
-      (!Number.isInteger(
-        Number(supplierId.trim()),
-      ) ||
-        Number(supplierId.trim()) <= 0)
+      !supplierId.trim() ||
+      !Number.isInteger(parsedSupplierId) ||
+      parsedSupplierId <= 0
     ) {
-      setError(
-        "O fornecedor precisa ser um ID válido.",
-      );
+      setError("Selecione um fornecedor válido.");
       return;
     }
 
@@ -363,17 +473,12 @@ export default function EditProductScreen() {
         product.id,
         {
           name: trimmedName,
-          sku: trimmedSku,
+          ...(sku.trim() ? { sku: sku.trim().toUpperCase() } : {}),
           description:
             description.trim() || null,
           category_id:
             parsedCategoryId,
-          supplier_id:
-            supplierId.trim()
-              ? Number(
-                  supplierId.trim(),
-                )
-              : null,
+          supplier_id: parsedSupplierId,
           cost_price:
             trimmedCostPrice.replace(
               ",",
@@ -400,7 +505,7 @@ export default function EditProductScreen() {
       );
 
       router.replace(
-        `/products/${product.id}`,
+        `/(tabs)products/${product.id}`,
       );
     } catch (err) {
       setError(
@@ -574,53 +679,167 @@ export default function EditProductScreen() {
               />
 
               <FormInput
-                label="SKU"
+                label="Código do produto (SKU)"
                 value={sku}
                 onChangeText={setSku}
-                placeholder="Ex.: TEC-RGB-001"
-                autoCapitalize="characters"
+                placeholder="Código do produto"
               />
+              <Text style={styles.label}>
+                Você pode alterar o SKU. Se deixar em branco, o código atual será preservado.
+              </Text>
 
-              <FormInput
+<FormInput
                 label="Descrição"
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Descrição do produto"
                 multiline
               />
-            </View>
-          </View>
+<View style={[styles.field, categoryDropdownOpen ? { zIndex: 9999, elevation: 9999 } : undefined]}>
+  <Text style={styles.label}>Categoria *</Text>
 
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>
-              Classificação
+  <TouchableOpacity
+    activeOpacity={0.7}
+    disabled={categoriesLoading}
+    onPress={() => {
+      setCategoryDropdownOpen((open) => !open);
+      setSupplierDropdownOpen(false);
+    }}
+    style={styles.categorySelect}
+  >
+    <Text
+      style={[
+        styles.categorySelectText,
+        !categoryId && styles.categoryPlaceholder,
+      ]}
+    >
+      {categoriesLoading
+        ? "Carregando categorias..."
+        : categories.find(
+            (item) => String(item.id) === categoryId,
+          )?.name ?? "Selecione uma categoria"}
+    </Text>
+
+    {categoriesLoading ? (
+      <ActivityIndicator size="small" color={colors.brand[600]} />
+    ) : (
+      <Text style={styles.categoryArrow}>
+        {categoryDropdownOpen ? "⌃" : "⌄"}
+      </Text>
+    )}
+  </TouchableOpacity>
+
+  {categoryDropdownOpen && !categoriesLoading && (
+    <ScrollView
+      style={[styles.dropdownList, { backgroundColor: "#FFFFFF", zIndex: 10000, elevation: 10000 }]}
+      nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
+      {categories.length === 0 ? (
+        <Text style={styles.categoryEmpty}>
+          Nenhuma categoria ativa encontrada.
+        </Text>
+      ) : (
+        categories.map((item) => (
+          <TouchableOpacity
+            key={item.id}
+            activeOpacity={0.7}
+            style={styles.categoryOption}
+            onPress={() => {
+              setCategoryId(String(item.id));
+              setCategoryDropdownOpen(false);
+              setError("");
+            }}
+          >
+            <Text style={styles.categoryOptionText}>
+              {item.name}
             </Text>
 
-            <View style={styles.card}>
-              <FormInput
-                label="ID da categoria"
-                value={categoryId}
-                onChangeText={setCategoryId}
-                placeholder="Ex.: 1"
-                keyboardType="numeric"
-              />
+            {String(item.id) === categoryId ? (
+              <Text style={styles.categoryCheck}>✓</Text>
+            ) : null}
+          </TouchableOpacity>
+        ))
+      )}
+    </ScrollView>
+  )}
+</View>
 
-              <FormInput
-                label="ID do fornecedor"
-                value={supplierId}
-                onChangeText={setSupplierId}
-                placeholder="Opcional"
-                keyboardType="numeric"
-              />
+<View style={[styles.field, supplierDropdownOpen ? { zIndex: 9999, elevation: 9999, marginBottom: 240 } : undefined]}>
+  <Text style={styles.label}>Fornecedor *</Text>
 
-              <FormInput
-                label="Unidade"
-                value={unit}
-                onChangeText={setUnit}
-                placeholder="Ex.: UN"
-                autoCapitalize="characters"
-              />
-            </View>
+  <TouchableOpacity
+    activeOpacity={0.7}
+    disabled={suppliersLoading}
+    onPress={() => {
+      setSupplierDropdownOpen((open) => !open);
+      setCategoryDropdownOpen(false);
+    }}
+    style={styles.categorySelect}
+  >
+    <Text
+      style={[
+        styles.categorySelectText,
+        !supplierId && styles.categoryPlaceholder,
+      ]}
+    >
+      {suppliersLoading
+        ? "Carregando fornecedores..."
+        : suppliers.find(
+            (supplier) => String(supplier.id) === supplierId,
+          )?.name ?? "Selecione um fornecedor"}
+    </Text>
+
+    {suppliersLoading ? (
+      <ActivityIndicator size="small" color={colors.brand[600]} />
+    ) : (
+      <Text style={styles.categoryArrow}>
+        {supplierDropdownOpen ? "⌃" : "⌄"}
+      </Text>
+    )}
+  </TouchableOpacity>
+
+  {supplierDropdownOpen && !suppliersLoading && (
+    <ScrollView
+      style={[styles.dropdownList, { backgroundColor: "#FFFFFF", zIndex: 10000, elevation: 10000 }]}
+      contentContainerStyle={{ zIndex: undefined, backgroundColor: "#FFFFFF" }}
+            nestedScrollEnabled
+      keyboardShouldPersistTaps="handled"
+    >
+
+
+      {suppliers.length === 0 ? (
+        <Text style={styles.categoryEmpty}>
+          Nenhum fornecedor encontrado.
+        </Text>
+      ) : (
+        suppliers.map((supplier) => (
+          <TouchableOpacity
+            key={supplier.id}
+            activeOpacity={0.7}
+            style={styles.categoryOption}
+            onPress={() => {
+              setSupplierId(String(supplier.id));
+              setSupplierDropdownOpen(false);
+              setError("");
+            }}
+          >
+            <Text style={styles.categoryOptionText}>
+              {supplier.name}
+              {!supplier.is_active ? " (Inativo)" : ""}
+            </Text>
+
+            {String(supplier.id) === supplierId ? (
+              <Text style={styles.categoryCheck}>✓</Text>
+            ) : null}
+          </TouchableOpacity>
+        ))
+      )}
+    </ScrollView>
+  )}
+</View>
+
+                          </View>
           </View>
 
           <View style={styles.section}>
@@ -644,6 +863,65 @@ export default function EditProductScreen() {
                 placeholder="0,00"
                 keyboardType="decimal-pad"
               />
+              <View style={styles.field}>
+                <Text style={styles.label}>Unidade de medida *</Text>
+                <TouchableOpacity
+                  activeOpacity={0.7}
+                  style={styles.categorySelect}
+                  onPress={() => setUnitDropdownOpen((open) => !open)}
+                >
+                  <Text style={styles.categorySelectText}>
+                    {({
+                      UN: "Unidade",
+                      KG: "Quilograma",
+                      G: "Grama",
+                      L: "Litro",
+                      M: "Metro",
+                      CX: "Caixa",
+                      PCT: "Pacote",
+                      PAR: "Par",
+                    } as Record<string, string>)[unit] ?? "Selecione uma unidade"}
+                  </Text>
+                  <Text style={styles.categoryArrow}>
+                    {unitDropdownOpen ? "⌃" : "⌄"}
+                  </Text>
+                </TouchableOpacity>
+
+                {unitDropdownOpen ? (
+                  <View style={styles.dropdownList}>
+                    {([
+                      ["UN", "Unidade"],
+                      ["KG", "Quilograma"],
+                      ["G", "Grama"],
+                      ["L", "Litro"],
+                      ["M", "Metro"],
+                      ["CX", "Caixa"],
+                      ["PCT", "Pacote"],
+                      ["PAR", "Par"],
+                    ] as const).map(([value, label]) => (
+                      <TouchableOpacity
+                        key={value}
+                        activeOpacity={0.7}
+                        style={styles.categoryOption}
+                        onPress={() => {
+                          setUnit(value);
+                          setUnitDropdownOpen(false);
+                          setError("");
+                        }}
+                      >
+                        <Text style={styles.categoryOptionText}>{label}</Text>
+                        {unit === value ? (
+                          <Text style={styles.categoryCheck}>✓</Text>
+                        ) : null}
+                      </TouchableOpacity>
+                    ))}
+                  </View>
+                ) : null}
+
+                <Text style={styles.label}>
+                  Escolha como o produto será contado ou medido no estoque.
+                </Text>
+              </View>
             </View>
           </View>
 
@@ -757,8 +1035,8 @@ const styles = StyleSheet.create({
 
   content: {
     paddingHorizontal: spacing[5],
-    paddingTop: spacing[5],
-    paddingBottom: spacing[8],
+    paddingTop: spacing[7],
+    paddingBottom: spacing[10],
   },
 
   centered: {
@@ -811,7 +1089,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    marginBottom: spacing[6],
+    marginBottom: spacing[7],
   },
 
   backIcon: {
@@ -836,7 +1114,7 @@ const styles = StyleSheet.create({
 
   topBarTitle: {
     color: colors.text.primary,
-    fontSize: 16,
+    fontSize: 17,
     fontWeight: "700",
   },
 
@@ -851,8 +1129,8 @@ const styles = StyleSheet.create({
   },
 
   headerIcon: {
-    width: 56,
-    height: 56,
+    width: 68,
+    height: 68,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: radius.xl,
@@ -862,7 +1140,7 @@ const styles = StyleSheet.create({
 
   headerIconText: {
     color: colors.brand[600],
-    fontSize: 23,
+    fontSize: 27,
     fontWeight: "800",
   },
 
@@ -873,8 +1151,9 @@ const styles = StyleSheet.create({
 
   headerTitle: {
     color: colors.text.primary,
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: "800",
+    letterSpacing: -0.3,
   },
 
   headerDescription: {
@@ -933,8 +1212,7 @@ const styles = StyleSheet.create({
   },
 
   card: {
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[4],
+    padding: spacing[5],
     borderRadius: radius.xl,
     backgroundColor:
       colors.surface.light,
@@ -945,6 +1223,7 @@ const styles = StyleSheet.create({
   },
 
   field: {
+    position: "relative",
     marginBottom: spacing[4],
   },
 
@@ -956,9 +1235,9 @@ const styles = StyleSheet.create({
   },
 
   input: {
-    minHeight: 48,
+    minHeight: 50,
     paddingHorizontal: spacing[4],
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor:
       colors.neutral[50],
     borderWidth: 1,
@@ -1005,11 +1284,11 @@ const styles = StyleSheet.create({
     minHeight: 52,
     alignItems: "center",
     justifyContent: "center",
-    borderRadius: radius.md,
+    borderRadius: radius.lg,
     backgroundColor:
       colors.brand[500],
     marginTop: spacing[7],
-    ...shadows.soft,
+    ...shadows.floating,
   },
 
   saveButtonDisabled: {
@@ -1038,4 +1317,110 @@ const styles = StyleSheet.create({
   bottomSpace: {
     height: spacing[5],
   },
+
+
+categorySelect: {
+  minHeight: 50,
+  paddingHorizontal: spacing[4],
+  borderWidth: 1,
+  borderColor: colors.border.light,
+  borderRadius: radius.lg,
+  backgroundColor: colors.neutral[50],
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+},
+categorySelectText: {
+  flex: 1,
+  color: colors.text.primary,
+  fontSize: 14,
+},
+categoryArrow: {
+  fontSize: 22,
+  color: colors.text.secondary,
+},
+modalOverlay: {
+  flex: 1,
+  backgroundColor: "rgba(0,0,0,0.45)",
+  justifyContent: "center",
+  padding: spacing[5],
+},
+categoryModal: {
+  maxHeight: "75%",
+  padding: spacing[5],
+  borderRadius: radius.xl,
+  backgroundColor: colors.surface.light,
+},
+modalTitle: {
+  fontSize: 18,
+  fontWeight: "700",
+  color: colors.text.primary,
+  marginBottom: spacing[4],
+},
+categoryOption: {
+    paddingHorizontal: spacing[4],
+  minHeight: 50,
+  paddingVertical: spacing[3],
+  borderBottomWidth: 1,
+  borderBottomColor: colors.border.light,
+  flexDirection: "row",
+  alignItems: "center",
+  justifyContent: "space-between",
+},
+categoryOptionText: {
+  color: colors.text.primary,
+  fontSize: 14,
+},
+categoryCheck: {
+  color: colors.brand[600],
+  fontSize: 18,
+  fontWeight: "700",
+},
+categoryEmpty: {
+  color: colors.text.secondary,
+  paddingVertical: spacing[4],
+},
+modalCloseButton: {
+  minHeight: 46,
+  alignItems: "center",
+  justifyContent: "center",
+  marginTop: spacing[3],
+},
+modalCloseText: {
+  color: colors.brand[600],
+  fontWeight: "700",
+},
+
+categoryPlaceholder: {
+  color: "#94A3B8",
+},
+
+dropdownList: {
+    position: "absolute",
+    top: 72,
+    left: 0,
+    right: 0,
+    zIndex: 1000,
+    elevation: 12,
+    maxHeight: 220,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    borderRadius: radius.lg,
+    backgroundColor:  "#FFFFFF",
+    overflow: "hidden",
+  },
+
 });
+
+
+
+
+
+
+
+
+
+
+
+
+

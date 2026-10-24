@@ -6,6 +6,8 @@ export type StockMovementType =
 export type StockMovement = {
   id: number;
   product_id: number;
+  product_name: string;
+  product_sku: string;
   user_id: number;
   movement_type: StockMovementType;
   quantity: string;

@@ -1,4 +1,6 @@
+
 from app.db.database import get_db
+from app.core.inventory_owner import resolve_inventory_owner_id
 from app.modules.auth.auth_dependencies import get_current_user
 from app.modules.dashboard.dashboard_schema import (
     DashboardMovementChartItem,
@@ -22,17 +24,14 @@ router = APIRouter(
     response_model=DashboardSummaryResponse,
 )
 def summary(
-    days: int = Query(
-        default=30,
-        ge=1,
-        le=365,
-    ),
+    days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     return get_dashboard_summary(
-        db,
-        days,
+        db=db,
+        days=days,
+        owner_id=resolve_inventory_owner_id(db, current_user),
     )
 
 
@@ -41,17 +40,12 @@ def summary(
     response_model=list[DashboardMovementChartItem],
 )
 def movements(
-    days: int = Query(
-        default=30,
-        ge=1,
-        le=365,
-    ),
+    days: int = Query(default=30, ge=1, le=365),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
     return get_dashboard_movement_chart(
-        db,
-        days,
+        db=db,
+        days=days,
+        owner_id=resolve_inventory_owner_id(db, current_user),
     )
-
-

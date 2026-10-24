@@ -1,4 +1,5 @@
 from fastapi import FastAPI, Request
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.core.exceptions import StockPilotException
@@ -16,6 +17,13 @@ from app.modules.suppliers.supplier_router import router as suppliers_router
 
 app = FastAPI(title="StockPilot API")
 
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=False,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 @app.exception_handler(StockPilotException)
 async def stockpilot_exception_handler(

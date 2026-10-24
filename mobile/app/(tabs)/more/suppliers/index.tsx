@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
   FlatList,
@@ -30,7 +30,7 @@ import {
   spacing,
 } from "../../../../src/theme/spacing";
 
-const PAGE_SIZE = 20;
+const PAGE_SIZE = 5;
 
 export default function SuppliersScreen() {
   const router = useRouter();
@@ -42,6 +42,8 @@ export default function SuppliersScreen() {
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
   const [search, setSearch] = useState("");
+  const [debouncedSearch, setDebouncedSearch] = useState("");
+  const requestIdRef = useRef(0);
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
   const [totalPages, setTotalPages] = useState(1);
@@ -53,80 +55,87 @@ export default function SuppliersScreen() {
 
   const isAdmin = user?.role === "ADMIN";
 
-  async function loadSuppliers(
-    targetPage = 1,
-    append = false,
-    currentSearch = search,
-  ) {
-    if (!accessToken) {
-      setError("Sessão expirada. Faça login novamente.");
-      setLoading(false);
-      return;
-    }
+  function handleSearchChange(value: string) {
+    requestIdRef.current += 1;
+    setSearch(value);
+  }
 
-    try {
-      if (append) {
-        setLoadingMore(true);
-      } else {
-        setLoading(true);
+  const loadSuppliers = useCallback(
+    async (
+      targetPage = 1,
+      append = false,
+      currentSearch = debouncedSearch,
+    ) => {
+      if (!accessToken) {
+        setError("Sessão expirada. Faça login novamente.");
+        setLoading(false);
+        return;
       }
 
-      setError("");
+      const requestId = ++requestIdRef.current;
 
-      const response = await getSuppliers(
-        accessToken,
-        {
+      try {
+        if (append) {
+          setLoadingMore(true);
+        } else {
+          setLoading(true);
+        }
+
+        setError("");
+
+        const response = await getSuppliers(accessToken, {
           page: targetPage,
           pageSize: PAGE_SIZE,
           search: currentSearch,
           isActive: undefined,
-        },
-      );
+        });
 
-      setSuppliers((current) =>
-        append
-          ? [...current, ...response.items]
-          : response.items,
-      );
+        if (requestId !== requestIdRef.current) return;
 
-      setPage(response.page);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
-    } catch (err) {
-      setError(
-        err instanceof Error
-          ? err.message
-          : "Não foi possível carregar os fornecedores.",
-      );
-    } finally {
-      setLoading(false);
-      setLoadingMore(false);
-      setRefreshing(false);
-    }
-  }
+        setSuppliers((current) =>
+          append ? [...current, ...response.items] : response.items,
+        );
+        setPage(response.page);
+        setTotal(response.total);
+        setTotalPages(response.total_pages);
+      } catch (err) {
+        if (requestId === requestIdRef.current) {
+          setError(
+            err instanceof Error
+              ? err.message
+              : "Não foi possível carregar os fornecedores.",
+          );
+        }
+      } finally {
+        if (requestId === requestIdRef.current) {
+          setLoading(false);
+          setLoadingMore(false);
+          setRefreshing(false);
+        }
+      }
+    },
+    [accessToken, debouncedSearch],
+  );
 
   useEffect(() => {
     const timeout = setTimeout(() => {
       setPage(1);
-      loadSuppliers(1, false, search);
-    }, 350);
+      setDebouncedSearch(search.trim());
+    }, 200);
 
     return () => clearTimeout(timeout);
-  }, [accessToken, search]);
+  }, [search]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!accessToken) {
-        return;
-      }
-
-      loadSuppliers(1, false, search);
-    }, [accessToken]),
+      if (!accessToken) return;
+      loadSuppliers(1, false, debouncedSearch);
+    }, [accessToken, debouncedSearch, loadSuppliers]),
   );
 
   function handleRefresh() {
     setRefreshing(true);
-    loadSuppliers(1, false, search);
+    loadSuppliers(1, false, debouncedSearch);
   }
 
   function handleLoadMore() {
@@ -153,7 +162,10 @@ export default function SuppliersScreen() {
     return (
       <Pressable
         onPress={() =>
-          router.push(`/suppliers/${item.id}`)
+          router.push({
+            pathname: "/(tabs)/more/suppliers/[id]",
+            params: { id: String(item.id) },
+            })
         }
         style={({ pressed }) => [
           styles.card,
@@ -300,7 +312,9 @@ export default function SuppliersScreen() {
         {isAdmin && !search.trim() ? (
           <Pressable
             onPress={() =>
-              router.push("/suppliers/create")
+              router.push(
+                "/(tabs)/more/suppliers/create",
+              )
             }
             style={styles.emptyButton}
           >
@@ -348,10 +362,12 @@ export default function SuppliersScreen() {
             </Text>
           </View>
 
-          {isAdmin ? (
+          {isAdmin ? ( 
             <Pressable
               onPress={() =>
-                router.push("/suppliers/create")
+                router.push(
+                  "/(tabs)/more/suppliers/create",
+                )
               }
               style={({ pressed }) => [
                 styles.addButton,
@@ -376,7 +392,7 @@ export default function SuppliersScreen() {
 
           <TextInput
             value={search}
-            onChangeText={setSearch}
+            onChangeText={handleSearchChange}
             placeholder="Buscar fornecedor..."
             placeholderTextColor={colors.text.muted}
             style={styles.searchInput}
@@ -387,7 +403,7 @@ export default function SuppliersScreen() {
 
           {search.length > 0 ? (
             <Pressable
-              onPress={() => setSearch("")}
+              onPress={() => handleSearchChange("")}
               hitSlop={8}
             >
               <Ionicons
@@ -399,20 +415,6 @@ export default function SuppliersScreen() {
           ) : null}
         </View>
 
-        <View style={styles.resultHeader}>
-          <Text style={styles.resultCount}>
-            {total}{" "}
-            {total === 1
-              ? "fornecedor"
-              : "fornecedores"}
-          </Text>
-
-          {total > 0 ? (
-            <Text style={styles.resultHint}>
-              Página {page} de {totalPages}
-            </Text>
-          ) : null}
-        </View>
 
         {error ? (
           <View style={styles.errorBox}>
@@ -462,15 +464,34 @@ export default function SuppliersScreen() {
               tintColor={colors.brand[500]}
             />
           }
-          onEndReached={handleLoadMore}
-          onEndReachedThreshold={0.35}
           ListFooterComponent={
-            loadingMore ? (
-              <View style={styles.footerLoading}>
-                <ActivityIndicator
-                  size="small"
-                  color={colors.brand[500]}
-                />
+            totalPages > 1 ? (
+              <View style={styles.pagination}>
+                <Pressable
+                  disabled={page <= 1 || loading || loadingMore}
+                  onPress={() => loadSuppliers(page - 1, false, search)}
+                  style={[
+                    styles.pageButton,
+                    (page <= 1 || loading || loadingMore) && styles.pageButtonDisabled,
+                  ]}
+                >
+                  <Ionicons name="chevron-back" size={18} color={colors.text.primary} />
+                </Pressable>
+
+                <Text style={styles.pageLabel}>
+                  Página {page} de {totalPages}
+                </Text>
+
+                <Pressable
+                  disabled={page >= totalPages || loading || loadingMore}
+                  onPress={() => loadSuppliers(page + 1, false, search)}
+                  style={[
+                    styles.pageButton,
+                    (page >= totalPages || loading || loadingMore) && styles.pageButtonDisabled,
+                  ]}
+                >
+                  <Ionicons name="chevron-forward" size={18} color={colors.text.primary} />
+                </Pressable>
               </View>
             ) : null
           }
@@ -799,5 +820,33 @@ const styles = StyleSheet.create({
   footerLoading: {
     paddingVertical: spacing[4],
     alignItems: "center",
+  },
+  pagination: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: spacing[4],
+    paddingVertical: spacing[4],
+  },
+
+  pageButton: {
+    width: 40,
+    height: 40,
+    alignItems: "center",
+    justifyContent: "center",
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border.light,
+    backgroundColor: colors.surface.light,
+  },
+
+  pageButtonDisabled: {
+    opacity: 0.35,
+  },
+
+  pageLabel: {
+    color: colors.text.secondary,
+    fontSize: 13,
+    fontWeight: "600",
   },
 });
