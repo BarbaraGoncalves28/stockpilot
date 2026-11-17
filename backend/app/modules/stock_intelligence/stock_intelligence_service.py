@@ -1,4 +1,3 @@
-
 from datetime import UTC, datetime, timedelta
 from decimal import Decimal
 
@@ -159,6 +158,36 @@ def get_stock_intelligence_product(
     )
 
 
+def get_last_movements_by_product(
+    db: Session,
+    product_ids: list[int],
+    owner_id: int,
+) -> dict[int, datetime]:
+    if not product_ids:
+        return {}
+
+    results = db.execute(
+        select(
+            StockMovement.product_id,
+            func.max(StockMovement.created_at),
+        )
+        .join(
+            Product,
+            Product.id == StockMovement.product_id,
+        )
+        .where(
+            StockMovement.product_id.in_(product_ids),
+            Product.owner_id == owner_id,
+        )
+        .group_by(StockMovement.product_id)
+    ).all()
+
+    return {
+        product_id: last_movement_at
+        for product_id, last_movement_at in results
+    }
+
+
 def get_stock_intelligence_alerts(
     db: Session,
     owner_id: int,
@@ -170,25 +199,31 @@ def get_stock_intelligence_alerts(
         days=days,
     )
 
+    last_movements = get_last_movements_by_product(
+        db=db,
+        product_ids=[item.product_id for item in intelligence],
+        owner_id=owner_id,
+    )
+
     alerts: list[StockAlertItem] = []
 
     for item in intelligence:
         if item.risk_level == "OUT_OF_STOCK":
-            message = "Product is out of stock."
+            message = "Produto sem estoque."
 
         elif item.risk_level == "CRITICAL":
-            message = "Product stock is at or below the minimum level."
+            message = "O estoque do produto está no nível mínimo ou abaixo dele."
 
         elif item.risk_level == "HIGH":
             message = (
-                "Product is expected to reach the minimum stock level "
-                "within 7 days."
+                "O produto deve atingir o estoque mínimo "
+                "em até 7 dias."
             )
 
         elif item.risk_level == "MEDIUM":
             message = (
-                "Product is expected to reach the minimum stock level "
-                "within 30 days."
+                "O produto deve atingir o estoque mínimo "
+                "em até 30 dias."
             )
 
         else:
@@ -207,7 +242,10 @@ def get_stock_intelligence_alerts(
                 ),
                 risk_level=item.risk_level,
                 message=message,
+                last_movement_at=last_movements.get(item.product_id),
             )
         )
 
     return alerts
+
+

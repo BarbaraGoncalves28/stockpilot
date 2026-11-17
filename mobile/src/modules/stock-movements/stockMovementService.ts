@@ -120,3 +120,30 @@ export async function createStockMovement(
 
   return data as StockMovement;
 }
+
+export type StockMovementCounts = {
+  ALL: number;
+  IN: number;
+  OUT: number;
+  ADJUSTMENT: number;
+};
+
+export async function getStockMovementCounts(
+  accessToken: string,
+): Promise<StockMovementCounts> {
+  const response = await apiFetch("/stock-movements/summary", {
+    accessToken,
+  });
+
+  const data = await response.json();
+
+  if (!response.ok) {
+    throw new Error(
+      data.message ??
+        data.detail ??
+        "Não foi possível carregar os totais das movimentações.",
+    );
+  }
+
+  return data as StockMovementCounts;
+}

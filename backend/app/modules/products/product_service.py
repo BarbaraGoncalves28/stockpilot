@@ -26,19 +26,17 @@ def validate_product_relations(
     if not category.is_active:
         raise ValueError("Category is inactive.")
 
-    if supplier_id is None:
-        raise ValueError("A supplier is required.")
-
-    supplier = db.scalar(
-        select(Supplier).where(
-            Supplier.id == supplier_id,
-            Supplier.owner_id == owner_id,
+    if supplier_id is not None:
+        supplier = db.scalar(
+            select(Supplier).where(
+                Supplier.id == supplier_id,
+                Supplier.owner_id == owner_id,
+            )
         )
-    )
-    if not supplier:
-        raise ValueError("Supplier not found.")
-    if not supplier.is_active:
-        raise ValueError("Supplier is inactive.")
+        if not supplier:
+            raise ValueError("Supplier not found.")
+        if not supplier.is_active:
+            raise ValueError("Supplier is inactive.")
 
 
 def generate_product_sku(db: Session) -> str:
@@ -52,10 +50,6 @@ def generate_product_sku(db: Session) -> str:
 def create_product(
     db: Session, data: ProductCreate, owner_id: int
 ) -> Product:
-    validate_product_relations(
-        db, owner_id, data.category_id, data.supplier_id
-    )
-
     sku = data.sku or generate_product_sku(db)
     existing_product = db.scalar(
         select(Product).where(
@@ -65,6 +59,10 @@ def create_product(
     )
     if existing_product:
         raise ValueError("A product with this SKU already exists.")
+
+    validate_product_relations(
+        db, owner_id, data.category_id, data.supplier_id
+    )
 
     product = Product(
         owner_id=owner_id,
@@ -140,8 +138,6 @@ def update_product(
         raise ValueError("The product owner cannot be changed.")
 
     effective_supplier_id = update_data.get("supplier_id", product.supplier_id)
-    if effective_supplier_id is None:
-        raise ValueError("A supplier is required.")
 
     if "category_id" in update_data or "supplier_id" in update_data:
         validate_product_relations(

@@ -27,4 +27,5 @@ export type StockAlertItem = {
   estimated_days_until_min_stock: string | null;
   risk_level: StockRiskLevel;
   message: string;
+  last_movement_at: string | null;
 };

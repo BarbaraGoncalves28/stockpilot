@@ -518,7 +518,7 @@ def test_stock_intelligence_alerts_only_returns_products_with_alerts(
 
     assert critical_alert["risk_level"] == "CRITICAL"
     assert critical_alert["message"] == (
-        "Product stock is at or below the minimum level."
+        "O estoque do produto está no nível mínimo ou abaixo dele."
     )
 
 
@@ -674,4 +674,82 @@ def test_stock_intelligence_returns_404_for_nonexistent_product(client):
     )
 
     assert response.status_code == 404
+
+def test_stock_intelligence_alerts_returns_last_movement_at(
+    client,
+    db,
+):
+    headers = register_and_login(client)
+    category = create_category(db)
+
+    owner = db.query(User).filter(
+        User.email == "intelligence@example.com"
+    ).first()
+
+    product_with_movements = create_product(
+        db,
+        category_id=category.id,
+        name="Produto com Movimentações",
+        sku="INT-014",
+        current_stock=5,
+        min_stock=10,
+    )
+
+    product_without_movements = create_product(
+        db,
+        category_id=category.id,
+        name="Produto sem Movimentações",
+        sku="INT-015",
+        current_stock=0,
+        min_stock=10,
+    )
+
+    first_movement_at = datetime(2026, 10, 20, 10, 30)
+    last_movement_at = datetime(2026, 10, 22, 15, 45)
+
+    create_movement(
+        db,
+        product_id=product_with_movements.id,
+        user_id=owner.id,
+        movement_type="IN",
+        quantity=10,
+        created_at=first_movement_at,
+    )
+
+    create_movement(
+        db,
+        product_id=product_with_movements.id,
+        user_id=owner.id,
+        movement_type="OUT",
+        quantity=5,
+        created_at=last_movement_at,
+    )
+
+    response = client.get(
+        "/stock-intelligence/alerts",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    alert_with_movements = next(
+        item
+        for item in data
+        if item["product_id"] == product_with_movements.id
+    )
+
+    alert_without_movements = next(
+        item
+        for item in data
+        if item["product_id"] == product_without_movements.id
+    )
+
+    assert alert_with_movements["last_movement_at"] == (
+        last_movement_at.isoformat()
+    )
+
+    assert alert_without_movements["last_movement_at"] is None
+
 

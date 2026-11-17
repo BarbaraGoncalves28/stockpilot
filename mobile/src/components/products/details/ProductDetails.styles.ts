@@ -1,0 +1,73 @@
+import { StyleSheet } from "react-native";
+
+export const palette = {
+  background: "#050B14",
+  card: "#0D1520",
+  cardHighlight: "#131D2C",
+  input: "#0B131E",
+  border: "#1E2A3B",
+  text: "#FFFFFF",
+  secondary: "#8B9BB4",
+  green: "#00E599",
+  yellow: "#FFB800",
+  red: "#FF3366",
+  blue: "#00D1FF",
+  purple: "#9D4EDD",
+};
+
+export const styles = StyleSheet.create({
+  screen: { flex: 1, backgroundColor: palette.background },
+  content: { paddingHorizontal: 20, paddingTop: 12, paddingBottom: 36, gap: 18 },
+  centered: { flex: 1, backgroundColor: palette.background, alignItems: "center", justifyContent: "center", padding: 28 },
+  loadingText: { color: palette.secondary, marginTop: 12, fontSize: 14 },
+  errorTitle: { color: palette.text, fontSize: 20, fontWeight: "700", marginTop: 16 },
+  errorDescription: { color: palette.secondary, fontSize: 14, textAlign: "center", marginTop: 8, lineHeight: 21 },
+  errorIcon: { width: 48, height: 48, borderRadius: 24, backgroundColor: "rgba(255,51,102,0.12)", alignItems: "center", justifyContent: "center" },
+  errorIconText: { color: palette.red, fontSize: 25, fontWeight: "700" },
+  backButton: { marginTop: 22, backgroundColor: palette.green, borderRadius: 12, paddingHorizontal: 20, paddingVertical: 13 },
+  backButtonText: { color: "#050B14", fontWeight: "700" },
+  topBar: { height: 42, flexDirection: "row", alignItems: "center", justifyContent: "flex-start" },
+  backIcon: { width: 60, height: 60, borderRadius: 30, backgroundColor: "#071827", borderWidth: 1, borderColor: "#123B50", alignItems: "center", justifyContent: "center" },
+  
+  
+  
+  section: { backgroundColor: "#0D1520", borderWidth: 0.6, borderColor: "#1E2A3B", borderRadius: 14, padding: 16, gap: 14 },
+  sectionHeader: { flexDirection: "row", alignItems: "center", justifyContent: "space-between" },
+  sectionTitle: { color: palette.text, fontSize: 15, fontWeight: "700" },
+  sectionTitleContainer: { flexDirection: "row", alignItems: "center", gap: 14, flex: 1 },
+  link: { color: palette.green, fontSize: 12, fontWeight: "700" },
+  stockMain: { flexDirection: "row", alignItems: "center" },
+  stockOverview: { flexDirection: "row", alignItems: "center", minHeight: 58  },
+  stockCurrent: { flex: 1.35, justifyContent: "center", paddingLeft: 43 },
+  stockLimit: { flex: 1.15, minHeight: 54, justifyContent: "center", alignItems: "center", borderLeftWidth: 1, borderLeftColor: "#52708D" },
+  twoColumns: { flexDirection: "row", gap: 12 },
+  metric: { flex: 1, backgroundColor: "#0D1520", borderWidth: 0.6, borderColor: "#1E2A3B", borderRadius: 14, padding: 12, gap: 5 },
+  metricLabel: { color: palette.secondary, fontSize: 11 },
+  metricValue: { color: palette.text, fontSize: 15, fontWeight: "700" },
+  row: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 12 },
+  rowLabel: { color: palette.secondary, fontSize: 13, flex: 1 },
+  rowValue: { color: palette.text, fontSize: 13, fontWeight: "600", textAlign: "right", flex: 1 },
+  separator: { height: 1, backgroundColor: palette.border },
+  riskBadge: { borderRadius: 20, paddingHorizontal: 10, paddingVertical: 6 },
+  riskText: { fontSize: 11, fontWeight: "700" },
+  description: { color: palette.secondary, fontSize: 13, lineHeight: 21 },
+  movement: { flexDirection: "row", alignItems: "center", gap: 11 },
+  movementIcon: { width: 34, height: 34, borderRadius: 10, alignItems: "center", justifyContent: "center" },
+  movementSymbol: { fontSize: 18, fontWeight: "700" },
+  movementInfo: { flex: 1, gap: 4 },
+  movementTitle: { color: palette.text, fontSize: 13, fontWeight: "600" },
+  movementDate: { color: palette.secondary, fontSize: 11 },
+  movementAmount: { color: palette.text, fontSize: 12, fontWeight: "700", textAlign: "right" },
+  emptyText: { color: palette.secondary, fontSize: 12, textAlign: "center", paddingVertical: 12 },
+  actionButton: { borderRadius: 12, paddingVertical: 14, alignItems: "center", justifyContent: "center", borderWidth: 1 },
+  editButton: { backgroundColor: palette.green, borderColor: palette.green },
+  deactivateButton: { backgroundColor: "rgba(255,51,102,0.08)", borderColor: "rgba(255,51,102,0.4)" },
+  restoreButton: { backgroundColor: "rgba(0,229,153,0.08)", borderColor: "rgba(0,229,153,0.4)" },
+  actionText: { fontSize: 13, fontWeight: "700" },
+  editText: { color: "#050B14" },
+  dangerText: { color: palette.red },
+  restoreText: { color: palette.green },
+});
+
+
+

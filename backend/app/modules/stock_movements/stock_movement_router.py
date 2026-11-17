@@ -12,6 +12,7 @@ from app.modules.stock_movements.stock_movement_schema import (
 )
 from app.modules.stock_movements.stock_movement_service import (
     create_stock_movement,
+    count_movements_by_type,
     list_movements,
     list_product_movements,
 )
@@ -113,6 +114,15 @@ def list_all(
     }
 
 
+
+
+@router.get("/summary", response_model=dict[str, int])
+def movement_summary(
+    db: Session = Depends(get_db),
+    current_user=Depends(get_current_user),
+):
+    owner_id = resolve_inventory_owner_id(db, current_user)
+    return count_movements_by_type(db=db, owner_id=owner_id)
 @router.get(
     "/product/{product_id}",
     response_model=list[StockMovementResponse],
@@ -133,3 +143,5 @@ def list_by_product(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=str(error),
         ) from error
+
+

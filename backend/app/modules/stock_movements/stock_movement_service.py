@@ -175,3 +175,32 @@ def list_product_movements(
             )
         ).all()
     )
+
+
+def count_movements_by_type(
+    db: Session,
+    owner_id: int,
+) -> dict[str, int]:
+    rows = db.execute(
+        select(
+            StockMovement.movement_type,
+            func.count(StockMovement.id),
+        )
+        .join(Product, Product.id == StockMovement.product_id)
+        .where(Product.owner_id == owner_id)
+        .group_by(StockMovement.movement_type)
+    ).all()
+
+    counts = {
+        "ALL": 0,
+        "IN": 0,
+        "OUT": 0,
+        "ADJUSTMENT": 0,
+    }
+
+    for movement_type, quantity in rows:
+        counts["ALL"] += quantity
+        if movement_type in counts:
+            counts[movement_type] = quantity
+
+    return counts

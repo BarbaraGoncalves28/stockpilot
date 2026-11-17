@@ -102,6 +102,8 @@ def create_movement(
     user_id: int,
     movement_type: str,
     quantity: int,
+    previous_stock: int = 0,
+    new_stock: int | None = None,
     created_at: datetime | None = None,
 ):
     movement = StockMovement(
@@ -109,8 +111,10 @@ def create_movement(
         user_id=user_id,
         movement_type=movement_type,
         quantity=quantity,
-        previous_stock=0,
-        new_stock=quantity,
+        previous_stock=previous_stock,
+        new_stock=(
+            new_stock if new_stock is not None else quantity
+        ),
         reason="Teste dashboard",
         notes=None,
         created_at=created_at or datetime.now(UTC).replace(tzinfo=None),
@@ -508,3 +512,104 @@ def test_dashboard_summary_and_movements_accept_maximum_days(
     assert movements_response.status_code == 200
     assert movements_response.json() == []
 
+def test_dashboard_summary_calculates_stock_turnover_rate(
+    client,
+    db,
+):
+    register_user(client)
+    headers = get_auth_headers(client)
+
+    user = db.query(User).filter(
+        User.email == "dashboard@example.com"
+    ).first()
+
+    product = create_product(
+        db,
+        name="Produto Giro",
+        sku="DASH-009",
+        current_stock=8,
+        min_stock=2,
+    )
+
+    now = datetime.now(UTC).replace(tzinfo=None)
+
+    # Estoque inicial: 10 unidades.
+    # Entrada: 5 unidades.
+    create_movement(
+        db,
+        product_id=product.id,
+        user_id=user.id,
+        movement_type="IN",
+        quantity=5,
+        previous_stock=10,
+        new_stock=15,
+        created_at=now - timedelta(days=2),
+    )
+
+    # Saída: 3 unidades.
+    create_movement(
+        db,
+        product_id=product.id,
+        user_id=user.id,
+        movement_type="OUT",
+        quantity=3,
+        previous_stock=15,
+        new_stock=12,
+        created_at=now - timedelta(days=1),
+    )
+
+    # Ajuste: estoque passa de 12 para 8.
+    # Não deve ser contabilizado como saída.
+    create_movement(
+        db,
+        product_id=product.id,
+        user_id=user.id,
+        movement_type="ADJUSTMENT",
+        quantity=8,
+        previous_stock=12,
+        new_stock=8,
+        created_at=now,
+    )
+
+    response = client.get(
+        "/dashboard/summary?days=30",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    # Estoque inicial: 10 x R$ 100 = R$ 1.000.
+    # Estoque atual: 8 x R$ 100 = R$ 800.
+    # Estoque médio: R$ 900.
+    # Custo das saídas: 3 x R$ 100 = R$ 300.
+    # Giro: (300 / 900) x 100 = 33,333...%.
+    assert abs(float(data["stock_turnover_rate"]) - 33.333333) < 0.001
+
+
+def test_dashboard_summary_returns_zero_turnover_with_empty_inventory(
+    client,
+    db,
+):
+    register_user(client)
+    headers = get_auth_headers(client)
+
+    create_product(
+        db,
+        name="Produto Sem Estoque",
+        sku="DASH-010",
+        current_stock=0,
+        min_stock=2,
+    )
+
+    response = client.get(
+        "/dashboard/summary?days=30",
+        headers=headers,
+    )
+
+    assert response.status_code == 200
+
+    data = response.json()
+
+    assert float(data["stock_turnover_rate"]) == 0

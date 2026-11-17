@@ -1,3 +1,4 @@
+from datetime import datetime
 from decimal import Decimal
 
 from pydantic import BaseModel
@@ -13,6 +14,7 @@ class StockIntelligenceItem(BaseModel):
     estimated_days_until_min_stock: Decimal | None
     risk_level: str
 
+
 class StockAlertItem(BaseModel):
     product_id: int
     product_name: str
@@ -23,5 +25,4 @@ class StockAlertItem(BaseModel):
     estimated_days_until_min_stock: Decimal | None
     risk_level: str
     message: str
-
-
+    last_movement_at: datetime | None

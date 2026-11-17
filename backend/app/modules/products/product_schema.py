@@ -12,7 +12,7 @@ class ProductCreate(BaseModel):
     sku: str | None = Field(default=None, min_length=1, max_length=50)
     description: str | None = Field(default=None)
     category_id: int = Field(gt=0)
-    supplier_id: int = Field(gt=0)
+    supplier_id: int | None = Field(default=None, gt=0)
     cost_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
     sale_price: Decimal = Field(ge=0, max_digits=12, decimal_places=2)
     current_stock: Decimal = Field(default=0, ge=0, max_digits=12, decimal_places=3)

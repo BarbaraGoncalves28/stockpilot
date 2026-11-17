@@ -1,3 +1,4 @@
+
 export const API_URL = "http://192.168.1.239:8000";
 
 type ApiOptions = RequestInit & {
@@ -25,7 +26,7 @@ export async function apiFetch(
     );
   }
 
-  return fetch(`${API_URL}${path}`, {
+  return await fetch(`${API_URL}${path}`, {
     ...fetchOptions,
     headers: requestHeaders,
   });

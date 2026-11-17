@@ -75,3 +75,18 @@ mobile/CLAUDE.md
 # Backup files
 *.bak
 *.bak-*
+
+# Expo local files
+.expo/
+.expo-shared/
+
+# Local backups
+backups/
+**/backups/
+
+# Temporary backup files
+*.backup
+*.backup-*
+*.bak
+*.bak-*
+*.bak_*

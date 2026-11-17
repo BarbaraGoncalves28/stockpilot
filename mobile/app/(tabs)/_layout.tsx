@@ -1,118 +1,32 @@
 import { Tabs } from "expo-router";
-import {
-  Ionicons,
-} from "@expo/vector-icons";
 
-import { colors } from "../../src/theme/colors";
+import { AppNavbar } from "../../src/components/navigation/AppNavbar";
+import { BottomNavigation } from "../../src/components/navigation/BottomNavigation";
 
 export default function TabsLayout() {
   return (
     <Tabs
+      tabBar={(props) => <BottomNavigation {...props} />}
       screenOptions={{
-        headerShown: false,
-
-        tabBarActiveTintColor: colors.brand[500],
-        tabBarInactiveTintColor: colors.text.muted,
-
-        tabBarStyle: {
-          height: 68,
-          paddingTop: 8,
-          paddingBottom: 10,
-          backgroundColor: colors.surface.light,
-          borderTopWidth: 1,
-          borderTopColor: colors.border.light,
-        },
-
-        tabBarLabelStyle: {
-          fontSize: 11,
-          fontWeight: "600",
-        },
-
+        headerShown: true,
+        header: () => <AppNavbar />,
         tabBarHideOnKeyboard: true,
+        tabBarStyle: {
+          backgroundColor: "#050B14",
+          borderTopWidth: 0,
+          elevation: 0,
+        },
+        sceneStyle: {
+          paddingBottom: 72,
+          backgroundColor: "#050B14",
+        },
       }}
     >
-      <Tabs.Screen
-        name="dashboard"
-        options={{
-          title: "Início",
-
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={
-                focused
-                  ? "grid"
-                  : "grid-outline"
-              }
-              size={22}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="products"
-        options={{
-          title: "Produtos",
-
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={
-                focused
-                  ? "cube"
-                  : "cube-outline"
-              }
-              size={22}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="movements"
-        options={{
-          title: "Movimentos",
-
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={
-                focused
-                  ? "swap-vertical"
-                  : "swap-vertical-outline"
-              }
-              size={23}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-      <Tabs.Screen
-        name="more"
-        options={{
-          title: "Mais",
-
-          tabBarIcon: ({ color, focused }) => (
-            <Ionicons
-              name={
-                focused
-                  ? "menu"
-                  : "menu-outline"
-              }
-              size={23}
-              color={color}
-            />
-          ),
-        }}
-      />
-
-            <Tabs.Screen
-        name="movement-create"
-        options={{
-          href: null,
-        }}
-      />
+      <Tabs.Screen name="dashboard" options={{ title: "Início" }} />
+      <Tabs.Screen name="products" options={{ title: "Produtos" }} />
+      <Tabs.Screen name="movements" options={{ title: "Movimentos" }} />
+      <Tabs.Screen name="more" options={{ title: "Mais" }} />
+      <Tabs.Screen name="movement-create" options={{ href: null }} />
     </Tabs>
   );
 }
